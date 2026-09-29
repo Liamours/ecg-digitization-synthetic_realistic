@@ -2,13 +2,9 @@ import tempfile
 from pathlib import Path
 
 from docling.document_converter import DocumentConverter
-from PIL import Image, ImageOps
+from PIL import Image
 
-
-def load_upright(path: Path, max_side: int) -> Image.Image:
-    img = ImageOps.exif_transpose(Image.open(path).convert("RGB"))
-    img.thumbnail((max_side, max_side))
-    return img
+from src.image_io import load_upright  # noqa: F401  (re-exported for src.run_pages)
 
 
 def read_texts(converter: DocumentConverter, img: Image.Image) -> list[dict]:

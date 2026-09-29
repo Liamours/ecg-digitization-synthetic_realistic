@@ -1,6 +1,11 @@
 datasets_dir: ../../datasets
 out_dir: ../../inferences/page_style
-max_side: 2500
+log_dir: ../../logs
+max_side: 800
+retry_max_side: 2500
+workers: 6
+threads_per_worker: 2
+log_every_s: 30
 seed: 42
 styles:
   edan: 'EDAN|SE-?1201'
