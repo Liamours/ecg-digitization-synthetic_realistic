@@ -1,0 +1,35 @@
+name: edan
+mode: page
+grid:
+  kind: line
+  angle_range_deg: 4.0
+  spacing_px_range: [5, 26]
+gain:
+  fixed: 10.0
+pulses:
+  window: [0.0, 0.1714, 0.2188, 1.0]
+  gray_max: 60
+  height_tolerance: [0.85, 1.15]
+  width_mm: [3.5, 9.0]
+  min_area: 80
+mask:
+  kind: unet
+regions:
+  - id: limb
+    labels: [I, II, III, aVR, aVL, aVF]
+    x: [0.14, 0.4707]
+    y: [0.2188, 0.8765]
+    rows: 6
+    rows_mode: peaks
+  - id: precordial
+    labels: [V1, V2, V3, V4, V5, V6]
+    x: [0.4804, 0.825]
+    y: [0.2188, 0.8765]
+    rows: 6
+    rows_mode: peaks
+  - id: rhythm
+    labels: [II_rhythm]
+    x: [0.14, 0.825]
+    y: [0.8765, 0.9647]
+    rows: 1
+    rows_mode: peaks

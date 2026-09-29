@@ -1,0 +1,22 @@
+ocr_threads: 8
+page_ocr_side: 2500
+panel_margin_px: [90, 20]
+sampling:
+  bin_mm: 0.1
+  min_bin_px: 1.2
+  mm_per_s: 25.0
+  baseline_window_bins: 120
+flags:
+  coverage_min: 0.9
+  p2p_max_mv: 6.0  # precordial leads reach 4 mV in this population; lead-off artifacts exceed it
+selftest:
+  max_lag_bins: 40
+gain:
+  allowed: [5.0, 10.0]
+  tolerance: 0.2
+unet:
+  repo: ../../external/Open-ECG-Digitizer
+  weights: weights/unet_weights_07072025.pt
+  max_side: 3000
+  threshold: 0.235
+log_dir: ../../logs

@@ -1,0 +1,22 @@
+name: fukuda
+mode: page
+grid:
+  kind: dot
+  pitch_px_range: [8.0, 20.0]
+  angle_range_deg: 4.0
+  blackhat_kernel: 9
+  blackhat_contrast: 28
+  dot_area: [2, 45]
+  dot_max_side: 9
+  fit_region: [0.1333, 0.9533, 0.0855, 0.9210]
+gain:
+  fixed: 5.0
+mask:
+  kind: unet
+regions:
+  - id: main
+    labels: [I, II, III, aVR, aVL, aVF, V1, V2, V3, V4, V5, V6]
+    x: [0.1333, 0.9533]
+    y: [0.0855, 0.9210]
+    rows: 12
+    rows_mode: peaks
