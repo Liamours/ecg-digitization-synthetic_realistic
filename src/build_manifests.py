@@ -1,9 +1,11 @@
-"""Add page_style, ink_fraction, and has_ecg to the real-photo dataset
-manifests. page_style comes from the page style CSVs (src.page_style output);
-ink_fraction (src.ink_fraction) is the share of paper pixels darker than their
-surroundings; has_ecg is True when the page matches a device style or its ink
-fraction reaches `ecg_ink_fraction`, which catches ECG strips pasted on a form
-and ECG from unlisted devices.
+"""Add page_style, style_evidence, ink_fraction, and has_ecg to the real-photo
+dataset manifests. page_style and style_evidence (the matched text) come from
+the page style CSVs (src.page_style output); a page that matched nothing and
+has an ink fraction below `blank_ink_fraction` is `blank`. ink_fraction
+(src.ink_fraction) is the share of paper pixels darker than their surroundings;
+has_ecg is True when the page matches a device style or its ink fraction
+reaches `ecg_ink_fraction`, which catches ECG strips pasted on a form and ECG
+from unlisted devices.
 
 `ekg-realistic_pages_original`: two columns appended to its manifest.
 `ekg-esta`: manifest created (it had none), one row per image and per PDF.
@@ -29,7 +31,7 @@ from tqdm import tqdm
 from src.ink_fraction import ink_fraction
 
 Image.MAX_IMAGE_PIXELS = None
-NEW_COLUMNS = ["page_style", "ink_fraction", "has_ecg"]
+NEW_COLUMNS = ["page_style", "style_evidence", "ink_fraction", "has_ecg"]
 
 
 def md5(path: Path) -> str:
@@ -59,15 +61,18 @@ def backup(path: Path, stamp: str) -> None:
         shutil.copy2(path, dest)
 
 
-def style_columns(style: str | None, ink: float | None, cfg: dict) -> dict:
-    if style is None or ink is None:
-        return {"page_style": "", "ink_fraction": "", "has_ecg": ""}
+def style_columns(entry: tuple[str, str] | None, ink: float | None, cfg: dict) -> dict:
+    if entry is None or ink is None:
+        return {"page_style": "", "style_evidence": "", "ink_fraction": "", "has_ecg": ""}
+    style, evidence = entry
+    if style == "-" and ink < cfg["blank_ink_fraction"]:
+        style = "blank"
     has_ecg = style in cfg["device_styles"] or ink >= cfg["ecg_ink_fraction"]
-    return {"page_style": style, "ink_fraction": round(ink, 3), "has_ecg": str(has_ecg)}
+    return {"page_style": style, "style_evidence": evidence, "ink_fraction": round(ink, 3), "has_ecg": str(has_ecg)}
 
 
-def load_styles(cfg: dict, dataset: str) -> dict[str, str]:
-    return {r["relative_path"]: r["page_style"] for r in read_csv(Path(cfg["page_style_dir"]) / f"{dataset}.csv")}
+def load_styles(cfg: dict, dataset: str) -> dict[str, tuple[str, str]]:
+    return {r["relative_path"]: (r["page_style"], r["matched"]) for r in read_csv(Path(cfg["page_style_dir"]) / f"{dataset}.csv")}
 
 
 def image_files(root: Path, cfg: dict) -> list[Path]:

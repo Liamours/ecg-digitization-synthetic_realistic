@@ -11,5 +11,6 @@ styles:
   edan: 'EDAN|SE-?1201'
   mac400: 'A?C\s*400|2030887|MDC7\d{6}|12SL|INNOQ'
   kardia: 'AliveCor|Kardia\s*(Determination|Mobile)'
+  fukuda: 'FX-7\d{3}|Fukuda'
   form: 'KEMENTERIAN|KESEHATAN|SARDJITO|Diagnosa|Kesimpulan|Hasil pemeriksaan'
 unknown_label: "-"

@@ -1,5 +1,6 @@
 datasets_dir: ../../datasets
 page_style_dir: ../../inferences/page_style
-device_styles: [mac400, edan, kardia]
+device_styles: [mac400, edan, kardia, fukuda]
+blank_ink_fraction: 0.01  # the 14 blank ekg-esta scans score 0.000 to 0.003
 ecg_ink_fraction: 0.08  # blank and handwritten forms score at most 0.052, ECG pages at least 0.109 (574 non-device pages checked)
 image_suffixes: [".jpg", ".jpeg", ".png"]
