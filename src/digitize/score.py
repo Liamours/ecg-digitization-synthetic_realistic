@@ -124,9 +124,10 @@ def main() -> None:
                 lead_rows += [[pid, g["id"], n, "panel not found", 0, "", "", "", ""] for n in gl]
                 continue
             meta = pipe[match[i]]["meta"]
-            want = float(re.match(r"\d+", panels[g["id"]]["gain"]).group())
-            gain_n += 1
-            gain_ok += meta["gain_mm_per_mV"] == want
+            printed = re.match(r"\d+", panels[g["id"]]["gain"])  # some panels print no gain at all
+            if printed:
+                gain_n += 1
+                gain_ok += meta["gain_mm_per_mV"] == float(printed.group())
             names = list(meta["leads"])
             lab_n += 1
             lab_ok += meta["labels"] == panels[g["id"]]["row_labels"].split(";")

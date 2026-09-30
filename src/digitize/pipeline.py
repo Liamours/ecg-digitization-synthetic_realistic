@@ -4,6 +4,7 @@ Two layout modes. `panel`: the page holds several MAC 400 style panels found fro
 own grid map, gain, and label set. `page`: the page is one sheet (Fukuda, EDAN) whose regions are given as fractions of the
 image in the layout file; the page must be upright.
 """
+import re
 from pathlib import Path
 
 import cv2
@@ -16,7 +17,7 @@ from src.digitize import mask as maskmod
 from src.digitize import ocr, pulses, selftest, text
 from src.digitize.gridmap import fit_grid
 from src.digitize.record import Grid, Lead, PanelRecord
-from src.orient import choose_rotation, rotate_box
+from src.orient import choose_rotation
 from src.panels import find_panels
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +85,32 @@ class Digitizer:
         rec.confidence = selftest.confidence(rec.leads, pulse, checks)
         return rec
 
+    def orient_and_read(self, small: np.ndarray, finding: dict) -> tuple[int, list[dict], np.ndarray]:
+        """Read the page text, choose the counterclockwise rotation that makes it upright, and read it again once it is upright:
+        OCR reads turned text far worse (on synthetic pages 19 to 23 percent of panels were found on turned pages, 65 on upright)."""
+        cfg = self.cfg
+        read = lambda im: ocr.read_text(cv2.cvtColor(im, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
+        foot = re.compile(finding["foot_regex"], re.I)
+        hits = lambda ts: sum(bool(foot.search(t["text"])) for t in ts)
+        texts = read(small)
+        k, _ = choose_rotation(texts, small.shape[1], small.shape[0], finding)
+        if k == 0 and hits(texts) == 0:  # nothing readable: the page may be upside down, keep whichever reading finds footers
+            flipped = np.rot90(small, 2).copy()
+            again = read(flipped)
+            if hits(again) > 0:
+                return 180, again, flipped
+            return 0, texts, small
+        if k == 0:
+            return 0, texts, small
+        turned = np.rot90(small, k // 90).copy()
+        again = read(turned)
+        k2, _ = choose_rotation(again, turned.shape[1], turned.shape[0], finding)
+        if k2 == 180:  # still upside down: the first direction was wrong
+            turned = np.rot90(turned, 2).copy()
+            again = read(turned)
+            return (k + 180) % 360, again, turned
+        return k, again, turned
+
     # ---- panel mode ---------------------------------------------------------------------------------------------
     def run_panel_page(self, image: np.ndarray) -> tuple[list[PanelRecord], np.ndarray, int]:
         """Returns the records, the upright page they refer to, and the counterclockwise rotation that made it upright."""
@@ -92,12 +119,10 @@ class Digitizer:
         h0, w0 = image.shape[:2]
         s = min(1.0, cfg["page_ocr_side"] / max(h0, w0))
         small = cv2.resize(image, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else image
-        texts = ocr.read_text(cv2.cvtColor(small, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
-        k, _ = choose_rotation(texts, small.shape[1], small.shape[0], finding)
+        k, texts, small = self.orient_and_read(small, finding)
         up = np.rot90(image, k // 90).copy()
-        sw, sh = small.shape[1], small.shape[0]
-        rotated = [(t["text"], rotate_box(t["bbox"], sw, sh, k)) for t in texts]
-        uw, uh = (sh, sw) if k in (90, 270) else (sw, sh)
+        rotated = [(t["text"], t["bbox"]) for t in texts]
+        uh, uw = small.shape[:2]
         panels = find_panels(rotated, uw, uh, finding)
         scale = up.shape[1] / uw
         prob = self.unet.probability(up) if lay["mask"]["kind"] == "unet" else None
