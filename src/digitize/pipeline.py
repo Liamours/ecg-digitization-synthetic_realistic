@@ -18,7 +18,7 @@ from src.digitize import ocr, pulses, selftest, text
 from src.digitize.gridmap import fit_grid
 from src.digitize.record import Grid, Lead, PanelRecord
 from src.orient import choose_rotation
-from src.panels import find_panels
+from src.panels import find_panels, iou
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -137,12 +137,15 @@ class Digitizer:
         cx0, cy0, cx1, cy1 = max(x0 - mx, 0), max(y0 - my, 0), min(x1 + mx, up.shape[1]), min(y1 + my, up.shape[0])
         crop = up[cy0:cy1, cx0:cx1]
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        if page_texts is not None and cfg.get("reuse_page_text"):  # the page read already found this text: 40 percent less time per page
-            inside = [t for t in page_texts if cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]
-            texts = [{"text": t["text"], "bbox": [scale * t["bbox"][0] - cx0, scale * t["bbox"][1] - cy0, scale * t["bbox"][2] - cx0, scale * t["bbox"][3] - cy0]} for t in inside]
-        else:
-            texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
+        texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
         labels, label_source = text.read_labels(texts, lay["label_sets"], index)
+        if label_source == "position" and page_texts is not None and cfg.get("merge_page_text"):
+            # the crop read no usable lead name: ask the page read before falling back to the template order
+            label_re = re.compile(lay["labels"]["label_regex"])
+            extra = [{"text": t["text"], "bbox": [0, 0, 1, 1]} for t in page_texts if label_re.match(t["text"].strip()) and cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]
+            labels2, source2 = text.read_labels(texts + extra, lay["label_sets"], index)
+            if source2 == "ocr":
+                labels, label_source = labels2, "page_ocr"
         rec = PanelRecord(f"panel{index}", lay["name"], box, [cx0, cy0], labels, label_source, None, "", Grid("dot", np.zeros(2), np.zeros(2), np.zeros(2)),
                           text_boxes=[{"text": t["text"], "bbox": [t["bbox"][0] + cx0, t["bbox"][1] + cy0, t["bbox"][2] + cx0, t["bbox"][3] + cy0]} for t in texts])
         try:

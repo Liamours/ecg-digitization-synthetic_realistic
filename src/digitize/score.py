@@ -23,14 +23,7 @@ import numpy as np
 
 from src.digitize.report import read_leads
 from src.orient import rotate_box
-
-
-def iou(a: list[float], b: list[float]) -> float:
-    w = min(a[2], b[2]) - max(a[0], b[0])
-    h = min(a[3], b[3]) - max(a[1], b[1])
-    inter = max(w, 0) * max(h, 0)
-    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
-    return inter / union if union > 0 else 0.0
+from src.panels import iou
 
 
 def waveform_score(gt: np.ndarray, fs: float, t: np.ndarray, mv: np.ndarray, max_shift_s: float = 0.5, tol_frac: float = 0.10) -> dict:

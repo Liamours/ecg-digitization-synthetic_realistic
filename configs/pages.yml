@@ -3,11 +3,13 @@ max_side: 2500
 seed: 42
 min_text_len: 4
 head_regex: 'A?C\s*400|^\s*GE\s*$'
-foot_regex: 'For\s*\d{7}'
+foot_regex: 'For\s*\d{7}|\d{7}\s*-\s*\d{3}'
 report_regex: 'Measurement|Interpretation|Serial\s*Number|Last\s*Name|Date\s*of\s*Birth|QT/QTC|RR/PP'
 ecg_regex: '\bMan\b|\bAuto\b|mm/\s*m[UV]|mm/\s*s|ADS|50\s*Hz|0\.08|BPM|^\s*(aV[RLF]|I{1,3}|V[1-6])\s*$'
-ecg_min_hits: 2
+ecg_min_hits: 0   # 0: any footer-anchored strip without report text is tried as an ECG panel; a blank one fails the grid fit and is flagged
 row_gap_frac: 0.05
+left_offset_frac: 0.12
+right_gap_frac: 0.05
 spacing_range: [0.6, 1.3]
 lone_width_ratio: 5.5
 lone_height_ratio: 0.84
