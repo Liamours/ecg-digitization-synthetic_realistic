@@ -112,3 +112,11 @@ def test_waveform_score():
     assert waveform_score(gt, fs, t, -same)["score"] < 15
     assert waveform_score(gt, fs, t, np.zeros_like(t))["score"] < 15
     assert waveform_score(gt, fs, t[: len(t) // 2], same[: len(t) // 2])["score"] < 55
+
+
+def test_entry_points_import():
+    """The command line modules are not otherwise imported by the tests, so a syntax slip in one would go unseen."""
+    import src.digitize.pipeline  # noqa: F401
+    import src.digitize.report  # noqa: F401
+    import src.digitize.run  # noqa: F401
+    import src.digitize.score  # noqa: F401

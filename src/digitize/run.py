@@ -1,17 +1,19 @@
 """Digitize ECG pages with a layout.
 
 Each page writes <out-dir>/<page stem>/: one JSON and CSV per panel, page.json (rotation, panel confidences),
-overlay_original.jpg and overlay_upright.jpg (the results drawn back on the page) and a log line with the ETA. Resumable: a page whose page.json
+overlay_original.jpg and overlay_upright.jpg (the results drawn back on the page). <out-dir>/progress.csv gets one row per page (seconds, panels, leads ok, status, error), the log file one line per page with an ETA from the last 20 pages. Resumable: a page whose page.json
 exists is skipped, so a stopped run continues where it stopped.
 
 Usage:
     uv run python -m src.digitize.run --config configs/digitize.yml --layout mac400 --out-dir <dir> [--list paths.txt] <image-or-folder> ...
 """
 import argparse
+import csv
 import json
 import logging
 import random
 import time
+from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -63,11 +65,18 @@ def main() -> None:
     if args.sample:
         pool = random.Random(args.seed).sample(pool, min(args.sample, len(pool)))
     files = [f for f in pool if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / "page.json").exists()]
-    log.info("%s: %d pages pending", layout["name"], len(files))
+    done_before = len(pool) - len(files)
+    log.info("%s: %d pages pending, %d already done (resuming)", layout["name"], len(files), done_before)
+    progress = args.out_dir / "progress.csv"
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    if not progress.exists():
+        progress.write_text("page,seconds,panels,leads_ok,leads,status,error\n", encoding="utf-8")
     digitizer = Digitizer(cfg, layout)
-    t0 = time.time()
+    recent, failed, t_start = deque(maxlen=20), 0, time.time()
     for n, path in enumerate(tqdm(files, desc=layout["name"]), 1):
         out = args.out_dir / f"{path.parent.name}__{path.stem}".replace(" ", "_")
+        t0 = time.time()
+        status, error, n_panels, ok, n_leads = "ok", "", 0, 0, 0
         try:
             image = load_image(path)
             out.mkdir(parents=True, exist_ok=True)  # a page with no panel still gets its page.json
@@ -81,15 +90,22 @@ def main() -> None:
             save_overlay(out / "overlay_upright.jpg", overlay, cfg["overlay_max_side"])
             if k:
                 save_overlay(out / "overlay_original.jpg", np.rot90(overlay, -(k // 90)).copy(), cfg["overlay_max_side"])
+            n_panels, ok, n_leads = len(records), sum(v.flag == "ok" for r in records for v in r.leads.values()), sum(len(r.leads) for r in records)
+            # page.json last: it is the done marker, so a crash before it repeats one page and never loses one silently
             (out / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k,
                                                        "panels": {r.panel_id: {"confidence": round(r.confidence, 3), "error": r.error, "leads_ok": sum(v.flag == "ok" for v in r.leads.values()), "leads": len(r.leads)} for r in records}}, indent=1), encoding="utf-8")
             if args.report:
                 report.make(out)
         except Exception as exc:
             log.exception("%s failed: %r", path, exc)
-            continue
-        rate = n / (time.time() - t0)
-        log.info("%s: %d/%d, ETA %s", path.name, n, len(files), timedelta(seconds=int((len(files) - n) / rate)))
+            status, error, failed = "error", repr(exc)[:120].replace(",", ";"), failed + 1
+        sec = time.time() - t0
+        recent.append(sec)
+        with progress.open("a", newline="", encoding="utf-8") as fh:
+            csv.writer(fh).writerow([path.name, round(sec, 1), n_panels, ok, n_leads, status, error])
+        eta = timedelta(seconds=int(sum(recent) / len(recent) * (len(files) - n)))
+        log.info("%s: %d/%d, %.1f s, %d panels, %d/%d leads ok, ETA %s (mean of the last %d pages)", path.name, n, len(files), sec, n_panels, ok, n_leads, eta, len(recent))
+    log.info("%s: done, %d pages in %s, %d failed", layout["name"], len(files), timedelta(seconds=int(time.time() - t_start)), failed)
 
 
 if __name__ == "__main__":
