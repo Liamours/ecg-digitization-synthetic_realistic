@@ -2,10 +2,11 @@
 import re
 
 
-def read_gain(texts: list[dict]) -> float | None:
+def read_gain(texts: list[dict], allowed: list[float]) -> float | None:
+    """Gain printed as N mm/mV; only allowed values count (OCR reads 10mm/mV as 0mm/mV, and the pulse then decides)."""
     for t in texts:
         m = re.search(r"(\d+(?:\.\d+)?)\s*mm/m", t["text"])
-        if m:
+        if m and float(m.group(1)) in allowed:
             return float(m.group(1))
     return None
 

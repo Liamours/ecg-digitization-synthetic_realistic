@@ -49,7 +49,7 @@ def pulse_check(pulses_mm: list[float], gain: float | None) -> dict:
 
 def flag_leads(leads: dict[str, Lead], cfg: dict) -> None:
     for v in leads.values():
-        bad = v.coverage < cfg["coverage_min"] or v.p2p_mv > cfg["p2p_max_mv"]
+        bad = not (v.coverage >= cfg["coverage_min"] and v.p2p_mv <= cfg["p2p_max_mv"])  # written so that NaN is bad
         v.flag = "low_quality" if bad else "ok"
 
 

@@ -5,7 +5,7 @@ overlay.png (the results drawn back on the original page) and a log line with th
 exists is skipped, so a stopped run continues where it stopped.
 
 Usage:
-    uv run python -m src.digitize.run --config configs/digitize.yml --layout mac400 --out-dir <dir> <image-or-folder> ...
+    uv run python -m src.digitize.run --config configs/digitize.yml --layout mac400 --out-dir <dir> [--list paths.txt] <image-or-folder> ...
 """
 import argparse
 import json
@@ -38,14 +38,16 @@ def main() -> None:
     ap.add_argument("--config", type=Path, required=True)
     ap.add_argument("--layout", required=True, help="layout name in configs/layouts or a path to a layout file")
     ap.add_argument("--out-dir", type=Path, required=True)
-    ap.add_argument("inputs", type=Path, nargs="+")
+    ap.add_argument("--list", type=Path, help="text file with one image path per line")
+    ap.add_argument("inputs", type=Path, nargs="*")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     layout = load_layout(args.layout)
     Path(cfg["log_dir"]).mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=Path(cfg["log_dir"]) / f"digitize-{layout['name']}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
                         format="%(asctime)s %(message)s", encoding="utf-8")
-    files = [f for f in collect(args.inputs) if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / "page.json").exists()]
+    listed = [Path(x) for x in args.list.read_text(encoding="utf-8").splitlines() if x.strip()] if args.list else []
+    files = [f for f in collect(args.inputs) + listed if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / "page.json").exists()]
     log.info("%s: %d pages pending", layout["name"], len(files))
     digitizer = Digitizer(cfg, layout)
     t0 = time.time()
@@ -53,6 +55,7 @@ def main() -> None:
         out = args.out_dir / f"{path.parent.name}__{path.stem}".replace(" ", "_")
         try:
             image = load_image(path)
+            out.mkdir(parents=True, exist_ok=True)  # a page with no panel still gets its page.json
             if layout["mode"] == "panel":
                 records, up, k = digitizer.run_panel_page(image)
             else:
@@ -66,7 +69,7 @@ def main() -> None:
             (out / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k,
                                                        "panels": {r.panel_id: {"confidence": round(r.confidence, 3), "error": r.error, "leads_ok": sum(v.flag == "ok" for v in r.leads.values()), "leads": len(r.leads)} for r in records}}, indent=1), encoding="utf-8")
         except Exception as exc:
-            log.error("%s failed: %r", path, exc)
+            log.exception("%s failed: %r", path, exc)
             continue
         rate = n / (time.time() - t0)
         log.info("%s: %d/%d, ETA %s", path.name, n, len(files), timedelta(seconds=int((len(files) - n) / rate)))

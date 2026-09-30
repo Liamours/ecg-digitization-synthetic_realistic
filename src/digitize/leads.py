@@ -68,3 +68,53 @@ def track_leads(mask: np.ndarray, bands: list[tuple[int, int]]) -> tuple[list[np
                 base[i] += FOLLOW_RATE * ((a + b) / 2 - base[i])
         crossings += crossed
     return out, crossings / max(len(cols), 1)
+
+
+MAX_GAP_COLUMNS = 80  # a lead that lost its pixels to a crossing trace keeps its last position this long
+
+
+def _overlap(a: int, b: int, c: int, d: int) -> int:
+    return max(0, min(b, d) - max(a, c))
+
+
+def track_leads_overlap(mask: np.ndarray, bands: list[tuple[int, int]]) -> tuple[list[np.ndarray], float]:
+    """Assign trace pixels to leads by overlap with each lead's run in the previous column.
+
+    A run overlapping one lead's previous run continues that lead. A run that overlaps several (a stroke crossing rows
+    merged them) goes to the lead with the largest overlap; the others get no pixels there and are interpolated later,
+    and the column counts as a crossing. A run overlapping none starts from the nearest baseline within half a row pitch.
+    Returns one mask per lead and the fraction of columns with a crossing.
+    """
+    k = len(bands)
+    base = np.array([np.median(np.nonzero(mask[b0:b1])[0]) + b0 if mask[b0:b1].any() else (b0 + b1) / 2 for b0, b1 in bands], dtype=float)
+    pitch = float(np.median(np.diff(base))) if k > 1 else 100.0
+    out = [np.zeros_like(mask) for _ in range(k)]
+    last: list[tuple[int, int, int] | None] = [None] * k  # a, b, column of the lead's latest run
+    crossings = 0
+    cols = np.flatnonzero(mask.any(axis=0))
+    for x in cols:
+        ys = np.flatnonzero(mask[:, x])
+        starts = ys[np.r_[True, np.diff(ys) > RUN_GAP]]
+        ends = ys[np.r_[np.diff(ys) > RUN_GAP, True]]
+        crossed = False
+        taken: dict[int, tuple[int, int]] = {}
+        for a, b in zip(starts, ends):
+            ov = [(_overlap(a - CROSS_TOL, b + CROSS_TOL, last[i][0], last[i][1]), i) for i in range(k) if last[i] is not None and x - last[i][2] <= MAX_GAP_COLUMNS]
+            hits = [(o, i) for o, i in ov if o > 0]
+            if hits:
+                crossed |= len(hits) > 1
+                i = max(hits)[1]
+            else:
+                cand = [i for i in range(k) if abs((a + b) / 2 - base[i]) < 0.5 * pitch]
+                if not cand:
+                    continue
+                i = min(cand, key=lambda j: abs((a + b) / 2 - base[j]))
+            out[i][a:b + 1, x] = 1
+            lo, hi = taken.get(i, (a, b))
+            taken[i] = (min(lo, a), max(hi, b))
+        for i, (a, b) in taken.items():
+            last[i] = (a, b, x)
+            if b - a < 0.35 * pitch:
+                base[i] += FOLLOW_RATE * ((a + b) / 2 - base[i])
+        crossings += crossed
+    return out, crossings / max(len(cols), 1)

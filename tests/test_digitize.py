@@ -74,7 +74,8 @@ def test_einthoven_and_lag_search():
 
 def test_pulse_and_text_rules():
     assert pulse_check([9.9, 10.1], 10.0)["pulse_mV"] == 1.0
-    assert read_gain([{"text": "25mm/s"}, {"text": "5mm/mU"}]) == 5.0
+    assert read_gain([{"text": "25mm/s"}, {"text": "5mm/mU"}], [5.0, 10.0]) == 5.0
+    assert read_gain([{"text": "0mm/mV"}], [5.0, 10.0]) is None
     sets = [["I", "II", "III"], ["aVR", "aVL", "aVF"], ["V1", "V2", "V3"], ["V4", "V5", "V6"]]
     assert read_labels([{"text": "*U4"}], sets, 0) == (sets[3], "ocr")
     assert read_labels([{"text": "MAC 400"}, {"text": "U1.02"}], sets, 2) == (sets[2], "position")

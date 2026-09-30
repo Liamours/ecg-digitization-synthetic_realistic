@@ -61,7 +61,8 @@ class Digitizer:
     def digitize_region(self, mask: np.ndarray, grid: Grid, gain: float, labels: list[str], rows: int, rows_mode: str) -> tuple[dict[str, Lead], float]:
         """Row assignment, sampling, and lead flags for one region's trace mask."""
         bands = leadmod.split_rows(mask, rows, rows_mode)
-        lead_masks, crossing = leadmod.track_leads(mask, bands)
+        track = leadmod.track_leads_overlap if self.layout.get("tracking") == "overlap" else leadmod.track_leads
+        lead_masks, crossing = track(mask, bands)
         ys, xs = np.nonzero(mask)
         x_all = grid.to_mm(np.column_stack([xs, ys]).astype(np.float64))[:, 0]
         x_range = (float(np.percentile(x_all, 0.2)), float(np.percentile(x_all, 99.8)))  # stray pixels at a region's edge must not stretch the time axis
@@ -120,7 +121,7 @@ class Digitizer:
             grid = fit_grid(gray, lay["grid"])
             zone = text.trace_zone(texts, gray.shape[0], lay["zone"])
             window = (0, gray.shape[1], zone[0], zone[1] + 40)
-            gain, source = text.read_gain(texts), "ocr"
+            gain, source = text.read_gain(texts, cfg["gain"]["allowed"]), "ocr"
             if gain is None:
                 found = [p for g in cfg["gain"]["allowed"] for p in pulses.find_pulses(gray, grid, g, window, lay["pulses"])]
                 gain, source = pulses.gain_from_pulses([p["height_mm"] for p in found], cfg["gain"]["allowed"], cfg["gain"]["tolerance"]), "pulse"

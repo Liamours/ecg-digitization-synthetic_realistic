@@ -31,6 +31,9 @@ def draw(image: np.ndarray, records: list[PanelRecord], cfg: dict) -> np.ndarray
             cv2.putText(out, t["text"][:22], (bx0, max(by0 - 6, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, TEXT_COLOR, 2)
         for name, lead in rec.leads.items():
             pts = lead_pixels(rec, name, cfg)
+            pts = pts[np.isfinite(pts).all(axis=1)]
+            if len(pts) < 2:
+                continue
             color = SIGNAL_COLOR if lead.flag == "ok" else (0, 165, 255)
             cv2.polylines(out, [np.round(pts).astype(np.int32).reshape(-1, 1, 2)], False, color, 2)
             cv2.putText(out, name, (int(pts[0, 0]) - 70, int(pts[0, 1]) + 8), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)

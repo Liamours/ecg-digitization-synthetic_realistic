@@ -1,14 +1,14 @@
-name: mac400
+name: mac400_wide_unet_overlap
 mode: panel
 panel_finding: configs/pages.yml
 label_sets: [[I, II, III], [aVR, aVL, aVF], [V1, V2, V3], [V4, V5, V6]]
 rows: 3
 rows_mode: equal
-tracking: baseline   # or overlap
+tracking: overlap
 cut_gap_px: 45
 grid:
   kind: dot
-  pitch_px_range: [9.0, 15.0]
+  pitch_px_range: [6.0, 16.0]
   angle_range_deg: 6.0
   blackhat_kernel: 9
   blackhat_contrast: 28
@@ -27,7 +27,7 @@ pulses:
   width_mm: [4.0, 9.0]
   min_area: 80
 mask:
-  kind: threshold
+  kind: unet
   gray_max: 130
   min_component: 100
   label_max_area: 1500
