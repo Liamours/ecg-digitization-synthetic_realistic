@@ -3,7 +3,7 @@ max_side: 2500
 seed: 42
 min_text_len: 4
 head_regex: 'A?C\s*400|^\s*GE\s*$'
-foot_regex: '2030887'
+foot_regex: 'For\s*\d{7}'
 report_regex: 'Measurement|Interpretation|Serial\s*Number|Last\s*Name|Date\s*of\s*Birth|QT/QTC|RR/PP'
 ecg_regex: '\bMan\b|\bAuto\b|mm/\s*m[UV]|mm/\s*s|ADS|50\s*Hz|0\.08|BPM|^\s*(aV[RLF]|I{1,3}|V[1-6])\s*$'
 ecg_min_hits: 2
