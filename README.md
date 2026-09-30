@@ -33,7 +33,11 @@ Layouts are config, not code: `configs/layouts/{mac400,fukuda,edan}.yml` give th
 
 ```
 uv run python -m src.digitize.run --config configs/digitize.yml --layout mac400 --out-dir <dir> <image-or-folder> ...
+uv run python -m src.digitize.run --config configs/digitize.yml --layout mac400 --out-dir <dir> <folder> --sample 5 --seed 42 --exclude <substring> --report
+uv run python -m src.digitize.report --out-dir <dir>
 uv run --with pytest python -m pytest tests/test_digitize.py
 ```
+
+`--sample N --seed S` draws the same N pages every time; `--report` (or the report command on an old run) writes `report.png` per page: the original page with panel boxes, text boxes, and traces on the left, every digitized lead in mV over time on the right. Nothing in the run calls a model that needs training; `mac400` uses a threshold trace mask and RapidOCR for text.
 
 Outputs per page: one JSON and CSV per panel (samples in mV with a quality flag per lead, the grid map, gain and its source, self-test results, confidence), `page.json`, and `overlay_upright.png`. Page-mode layouts expect an upright page. The U-Net mask needs the Open-ECG-Digitizer clone in `external/` (CC BY-SA 4.0, check before any product use).

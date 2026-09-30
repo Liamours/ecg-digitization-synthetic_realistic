@@ -80,3 +80,20 @@ def test_pulse_and_text_rules():
     assert read_labels([{"text": "*U4"}], sets, 0) == (sets[3], "ocr")
     assert read_labels([{"text": "MAC 400"}, {"text": "U1.02"}], sets, 2) == (sets[2], "position")
     assert read_labels([{"text": "V1.02"}, {"text": "aVR"}], sets, 0) == (sets[1], "ocr")
+
+
+def test_report_writes_png(tmp_path):
+    """report.make reads only run.py's files: page.json, panel json and csv, an overlay."""
+    import json
+
+    import cv2
+
+    from src.digitize.report import make
+
+    cv2.imwrite(str(tmp_path / "overlay_upright.png"), np.full((200, 150, 3), 255, np.uint8))
+    (tmp_path / "page.json").write_text(json.dumps({"source": "x.jpg", "layout": "mac400", "rotation_ccw_deg": 0, "panels": {"panel0": {}}}), encoding="utf-8")
+    (tmp_path / "panel0.json").write_text(json.dumps({"gain_mm_per_mV": 10.0, "gain_source": "ocr", "error": ""}), encoding="utf-8")
+    t = np.arange(0, 2, 0.004)
+    rows = ["time_s,I_mV,I_flag"] + [f"{x:.4f},{np.sin(6 * x):.4f},ok" for x in t]
+    (tmp_path / "panel0.csv").write_text("\n".join(rows), encoding="utf-8")
+    assert make(tmp_path).stat().st_size > 5000

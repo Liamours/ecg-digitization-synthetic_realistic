@@ -2,4 +2,4 @@
 name = "ecg-digitization-synthetic-realistic"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = ["docling", "numpy", "opencv-python-headless", "pillow", "pyyaml", "scipy", "torch", "tqdm"]
+dependencies = ["docling", "matplotlib", "numpy", "opencv-python-headless", "pillow", "pyyaml", "scipy", "torch", "tqdm"]

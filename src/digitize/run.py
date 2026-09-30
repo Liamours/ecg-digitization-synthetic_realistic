@@ -10,6 +10,7 @@ Usage:
 import argparse
 import json
 import logging
+import random
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,7 +20,7 @@ import numpy as np
 import yaml
 from tqdm import tqdm
 
-from src.digitize import reverse
+from src.digitize import report, reverse
 from src.digitize.pipeline import Digitizer, load_image, load_layout
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
@@ -39,6 +40,10 @@ def main() -> None:
     ap.add_argument("--layout", required=True, help="layout name in configs/layouts or a path to a layout file")
     ap.add_argument("--out-dir", type=Path, required=True)
     ap.add_argument("--list", type=Path, help="text file with one image path per line")
+    ap.add_argument("--sample", type=int, help="digitize N pages drawn from the inputs, the same N for the same seed")
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--exclude", nargs="*", default=[], help="skip paths containing any of these strings")
+    ap.add_argument("--report", action="store_true", help="write report.png (page with boxes, plus every lead) in each page folder")
     ap.add_argument("inputs", type=Path, nargs="*")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
@@ -47,7 +52,10 @@ def main() -> None:
     logging.basicConfig(filename=Path(cfg["log_dir"]) / f"digitize-{layout['name']}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
                         format="%(asctime)s %(message)s", encoding="utf-8")
     listed = [Path(x) for x in args.list.read_text(encoding="utf-8").splitlines() if x.strip()] if args.list else []
-    files = [f for f in collect(args.inputs) + listed if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / "page.json").exists()]
+    pool = [f for f in collect(args.inputs) + listed if not any(x in str(f) for x in args.exclude)]
+    if args.sample:
+        pool = random.Random(args.seed).sample(pool, min(args.sample, len(pool)))
+    files = [f for f in pool if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / "page.json").exists()]
     log.info("%s: %d pages pending", layout["name"], len(files))
     digitizer = Digitizer(cfg, layout)
     t0 = time.time()
@@ -68,6 +76,8 @@ def main() -> None:
                 cv2.imwrite(str(out / "overlay_original.png"), np.rot90(overlay, -(k // 90)).copy())
             (out / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k,
                                                        "panels": {r.panel_id: {"confidence": round(r.confidence, 3), "error": r.error, "leads_ok": sum(v.flag == "ok" for v in r.leads.values()), "leads": len(r.leads)} for r in records}}, indent=1), encoding="utf-8")
+            if args.report:
+                report.make(out)
         except Exception as exc:
             log.exception("%s failed: %r", path, exc)
             continue
