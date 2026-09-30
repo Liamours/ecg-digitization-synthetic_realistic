@@ -135,7 +135,7 @@ def main() -> None:
                 mv, flag = series[1][name]
                 w = waveform_score(np.load(root / row["digitized_path"]), float(row["signal_fs"]), series[0], mv)
                 funnel["recovered"] += 1
-                lead_rows.append([pid, g["id"], name, "recovered", round(w["score"], 1), round(w["corr"], 3), round(w["shift_s"], 2), round(w["amp_ratio"], 3), flag])
+                lead_rows.append([pid, g["id"], name, "recovered", round(w["score"], 1), round(w["corr"], 3), round(w["shift_s"], 2), round(w["amp_ratio"], 3), flag, pipe[match[i]]["file"].stem, meta["gain_mm_per_mV"]])
 
     rec = [r for r in lead_rows if r[3] == "recovered"]
     wave = float(np.mean([r[4] for r in rec])) if rec else 0.0
@@ -148,7 +148,7 @@ def main() -> None:
     (args.run / "score.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     with (args.run / "score_leads.csv").open("w", newline="", encoding="utf-8") as fh:
         w_ = csv.writer(fh)
-        w_.writerow(["page", "panel", "lead", "status", "score", "corr", "shift_s", "amp_ratio", "flag"])
+        w_.writerow(["page", "panel", "lead", "status", "score", "corr", "shift_s", "amp_ratio", "flag", "pipe_panel", "pipe_gain"])
         w_.writerows(lead_rows)
     print("| Step | Score (0-100) | Counted over |")
     print("|---|---|---|")
