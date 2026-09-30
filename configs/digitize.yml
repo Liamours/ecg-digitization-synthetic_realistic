@@ -1,4 +1,5 @@
-ocr_threads: 8
+ocr_threads: 4   # half the logical cores: a long CPU run coincided with a blue screen
+device: cpu      # cpu, cuda, or auto (cuda when torch sees a GPU)
 page_ocr_side: 2500
 panel_margin_px: [90, 20]
 sampling:

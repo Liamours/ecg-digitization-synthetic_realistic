@@ -65,7 +65,10 @@ class UNetMask:
         ck = torch.load(repo / cfg["weights"], weights_only=True, map_location="cpu")
         ck = ck[0] if isinstance(ck, tuple) else ck
         m.load_state_dict({k.replace("_orig_mod.", ""): v for k, v in ck.items()})
-        self.model = m.eval()
+        from src.digitize.ocr import resolve_device
+
+        self.device = resolve_device(cfg.get("device", "cpu"))
+        self.model = m.eval().to(self.device)
         self.max_side = cfg["max_side"]
         self.threshold = cfg["threshold"]
         self.torch = torch
@@ -74,10 +77,10 @@ class UNetMask:
         h, w = bgr.shape[:2]
         s = min(1.0, self.max_side / max(h, w))
         small = cv2.resize(bgr, (round(w * s) // 32 * 32, round(h * s) // 32 * 32), interpolation=cv2.INTER_AREA) if s < 1 else bgr[:h // 32 * 32, :w // 32 * 32]
-        x = self.torch.from_numpy(cv2.cvtColor(small, cv2.COLOR_BGR2RGB)).permute(2, 0, 1).float().unsqueeze(0) / 255.0
+        x = self.torch.from_numpy(cv2.cvtColor(small, cv2.COLOR_BGR2RGB)).permute(2, 0, 1).float().unsqueeze(0).to(self.device) / 255.0
         x = (x - x.min()) / (x.max() - x.min())
         with self.torch.no_grad():
-            p = self.torch.softmax(self.model(x), dim=1)[0, self.SIGNAL_CLASS].numpy()
+            p = self.torch.softmax(self.model(x), dim=1)[0, self.SIGNAL_CLASS].cpu().numpy()
         return cv2.resize(p, (w, h), interpolation=cv2.INTER_LINEAR)
 
     def mask(self, prob: np.ndarray) -> np.ndarray:

@@ -54,7 +54,7 @@ class Digitizer:
     @property
     def unet(self) -> maskmod.UNetMask:
         if self._unet is None:
-            self._unet = maskmod.UNetMask({**self.cfg["unet"], "repo": (ROOT / self.cfg["unet"]["repo"])})
+            self._unet = maskmod.UNetMask({**self.cfg["unet"], "repo": (ROOT / self.cfg["unet"]["repo"]), "device": self.cfg["device"]})
         return self._unet
 
     # ---- shared -------------------------------------------------------------------------------------------------
@@ -92,7 +92,7 @@ class Digitizer:
         h0, w0 = image.shape[:2]
         s = min(1.0, cfg["page_ocr_side"] / max(h0, w0))
         small = cv2.resize(image, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else image
-        texts = ocr.read_text(cv2.cvtColor(small, cv2.COLOR_BGR2RGB), cfg["ocr_threads"])
+        texts = ocr.read_text(cv2.cvtColor(small, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
         k, _ = choose_rotation(texts, small.shape[1], small.shape[0], finding)
         up = np.rot90(image, k // 90).copy()
         sw, sh = small.shape[1], small.shape[0]
@@ -113,7 +113,7 @@ class Digitizer:
         cx0, cy0, cx1, cy1 = max(x0 - mx, 0), max(y0 - my, 0), min(x1 + mx, up.shape[1]), min(y1 + my, up.shape[0])
         crop = up[cy0:cy1, cx0:cx1]
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"])
+        texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
         labels, label_source = text.read_labels(texts, lay["label_sets"], index)
         rec = PanelRecord(f"panel{index}", lay["name"], box, [cx0, cy0], labels, label_source, None, "", Grid("dot", np.zeros(2), np.zeros(2), np.zeros(2)),
                           text_boxes=[{"text": t["text"], "bbox": [t["bbox"][0] + cx0, t["bbox"][1] + cy0, t["bbox"][2] + cx0, t["bbox"][3] + cy0]} for t in texts])
