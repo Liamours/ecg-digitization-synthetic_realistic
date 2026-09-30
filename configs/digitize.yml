@@ -1,6 +1,7 @@
 ocr_threads: 4   # half the logical cores: a long CPU run coincided with a blue screen
 device: cpu      # cpu, cuda, or auto (cuda when torch sees a GPU)
 page_ocr_side: 2500
+overlay_max_side: 2200   # px, long side of the saved overlay jpgs
 panel_margin_px: [90, 20]
 sampling:
   bin_mm: 0.1

@@ -1,7 +1,7 @@
 """Digitize ECG pages with a layout.
 
 Each page writes <out-dir>/<page stem>/: one JSON and CSV per panel, page.json (rotation, panel confidences),
-overlay.png (the results drawn back on the original page) and a log line with the ETA. Resumable: a page whose page.json
+overlay_original.jpg and overlay_upright.jpg (the results drawn back on the page) and a log line with the ETA. Resumable: a page whose page.json
 exists is skipped, so a stopped run continues where it stopped.
 
 Usage:
@@ -32,6 +32,13 @@ def collect(inputs: list[Path]) -> list[Path]:
     for p in inputs:
         files += [p] if p.is_file() else sorted(q for q in p.rglob("*") if q.suffix.lower() in IMAGE_SUFFIXES)
     return files
+
+
+def save_overlay(path: Path, img: np.ndarray, max_side: int) -> None:
+    """Downscaled JPEG: a full-size PNG overlay is about 13 MB, which fills the disk over a whole dataset."""
+    s = min(1.0, max_side / max(img.shape[:2]))
+    small = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else img
+    cv2.imwrite(str(path), small, [cv2.IMWRITE_JPEG_QUALITY, 88])
 
 
 def main() -> None:
@@ -71,9 +78,9 @@ def main() -> None:
             for r in records:
                 r.save(out)
             overlay = reverse.draw(up, records, cfg["sampling"])
-            cv2.imwrite(str(out / "overlay_upright.png"), overlay)
+            save_overlay(out / "overlay_upright.jpg", overlay, cfg["overlay_max_side"])
             if k:
-                cv2.imwrite(str(out / "overlay_original.png"), np.rot90(overlay, -(k // 90)).copy())
+                save_overlay(out / "overlay_original.jpg", np.rot90(overlay, -(k // 90)).copy(), cfg["overlay_max_side"])
             (out / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k,
                                                        "panels": {r.panel_id: {"confidence": round(r.confidence, 3), "error": r.error, "leads_ok": sum(v.flag == "ok" for v in r.leads.values()), "leads": len(r.leads)} for r in records}}, indent=1), encoding="utf-8")
             if args.report:

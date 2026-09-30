@@ -30,8 +30,8 @@ def read_leads(csv_path: Path) -> tuple[np.ndarray, dict[str, tuple[np.ndarray, 
 
 def make(page_dir: Path, max_side: int = 1500) -> Path:
     page = json.loads((page_dir / "page.json").read_text(encoding="utf-8"))
-    overlay = page_dir / "overlay_original.png"
-    img = cv2.imread(str(overlay if overlay.exists() else page_dir / "overlay_upright.png"))
+    names = ["overlay_original.jpg", "overlay_upright.jpg", "overlay_original.png", "overlay_upright.png"]
+    img = cv2.imread(str(next(page_dir / n for n in names if (page_dir / n).exists())))
     s = min(1.0, max_side / max(img.shape[:2]))
     img = cv2.cvtColor(cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
     plots, unreadable = [], []
