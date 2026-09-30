@@ -35,8 +35,11 @@ Layouts are config, not code: `configs/layouts/{mac400,fukuda,edan}.yml` give th
 uv run python -m src.digitize.run --config configs/digitize.yml --layout mac400 --out-dir <dir> <image-or-folder> ...
 uv run python -m src.digitize.run --config configs/digitize.yml --layout mac400 --out-dir <dir> <folder> --sample 5 --seed 42 --exclude <substring> --report
 uv run python -m src.digitize.report --out-dir <dir>
+uv run python -m src.digitize.score --dataset <synthetic dataset dir> --run <digitize run dir>
 uv run --with pytest python -m pytest tests/test_digitize.py
 ```
+
+`score` needs a synthetic dataset (exact labels) and gives one 0 to 100 number per step, each conditional on the one before it: orientation, panels found, gain read, lead labels, waveform, and the end-to-end mean over every expected lead (0 where a lead was lost). It also writes `score.json` and `score_leads.csv` (one row per expected lead and why it was lost) into the run folder. Real pages have no ground truth and keep the label-free checks (calibration pulse, Einthoven).
 
 `--sample N --seed S` draws the same N pages every time; `--report` (or the report command on an old run) writes `report.png` per page: the original page with panel boxes, text boxes, and traces on the left, every digitized lead in mV over time on the right. Nothing in the run calls a model that needs training; `mac400` uses a threshold trace mask and RapidOCR for text.
 

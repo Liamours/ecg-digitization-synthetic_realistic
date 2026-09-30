@@ -97,3 +97,18 @@ def test_report_writes_png(tmp_path):
     rows = ["time_s,I_mV,I_flag"] + [f"{x:.4f},{np.sin(6 * x):.4f},ok" for x in t]
     (tmp_path / "panel0.csv").write_text("\n".join(rows), encoding="utf-8")
     assert make(tmp_path).stat().st_size > 5000
+
+
+def test_waveform_score():
+    """The same waveform on a shifted clock scores near its coverage, a flipped one and a half-length one score low."""
+    from src.digitize.score import waveform_score
+
+    fs = 500.0
+    rng = np.random.default_rng(0)
+    gt = np.convolve(rng.normal(size=1600), np.ones(25) / 25, mode="same") * 4  # smooth and not periodic, so a shift cannot fake a flip
+    t = np.arange(0, 3.0, 0.004)
+    same = np.interp(t + 0.1, np.arange(len(gt)) / fs, gt)
+    assert waveform_score(gt, fs, t, same)["score"] > 90  # 3.0 s of 3.2 s, so coverage caps it near 94
+    assert waveform_score(gt, fs, t, -same)["score"] < 15
+    assert waveform_score(gt, fs, t, np.zeros_like(t))["score"] < 15
+    assert waveform_score(gt, fs, t[: len(t) // 2], same[: len(t) // 2])["score"] < 55
