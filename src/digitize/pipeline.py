@@ -87,28 +87,27 @@ class Digitizer:
 
     def orient_and_read(self, small: np.ndarray, finding: dict) -> tuple[int, list[dict], np.ndarray]:
         """Read the page text, choose the counterclockwise rotation that makes it upright, and read it again once it is upright:
-        OCR reads turned text far worse (on synthetic pages 19 to 23 percent of panels were found on turned pages, 65 on upright)."""
+        OCR reads turned text far worse. The header-above-footer cue picks the direction; when it is missing (no header or no
+        footer read) both directions are read and the one that yields more known printed words wins."""
         cfg = self.cfg
         read = lambda im: ocr.read_text(cv2.cvtColor(im, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
-        foot = re.compile(finding["foot_regex"], re.I)
-        hits = lambda ts: sum(bool(foot.search(t["text"])) for t in ts)
+        vocab = re.compile(finding["vocab_regex"], re.I)
+        words = lambda ts: sum(bool(vocab.search(t["text"])) for t in ts)
+        frame = lambda r: small if r == 0 else np.rot90(small, r // 90).copy()
         texts = read(small)
-        k, _ = choose_rotation(texts, small.shape[1], small.shape[0], finding)
-        if k == 0 and hits(texts) == 0:  # nothing readable: the page may be upside down, keep whichever reading finds footers
-            flipped = np.rot90(small, 2).copy()
-            again = read(flipped)
-            if hits(again) > 0:
-                return 180, again, flipped
-            return 0, texts, small
+        k, scores = choose_rotation(texts, small.shape[1], small.shape[0], finding)
+        if not any(scores.values()):
+            reads = {r: texts if r == 0 else read(frame(r)) for r in scores}
+            k = max(reads, key=lambda r: words(reads[r]))
+            return k, reads[k], frame(k)
         if k == 0:
             return 0, texts, small
-        turned = np.rot90(small, k // 90).copy()
+        turned = frame(k)
         again = read(turned)
         k2, _ = choose_rotation(again, turned.shape[1], turned.shape[0], finding)
         if k2 == 180:  # still upside down: the first direction was wrong
             turned = np.rot90(turned, 2).copy()
-            again = read(turned)
-            return (k + 180) % 360, again, turned
+            return (k + 180) % 360, read(turned), turned
         return k, again, turned
 
     # ---- panel mode ---------------------------------------------------------------------------------------------
