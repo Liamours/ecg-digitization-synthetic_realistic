@@ -5,6 +5,7 @@ own grid map, gain, and label set. `page`: the page is one sheet (Fukuda, EDAN) 
 image in the layout file; the page must be upright.
 """
 import re
+from collections import Counter
 from pathlib import Path
 
 import cv2
@@ -83,6 +84,8 @@ class Digitizer:
         pulse = selftest.pulse_check(rec.pulses_mm, rec.gain_mm_per_mv)
         rec.selftest = {"pulse": pulse, "einthoven": checks}
         rec.confidence = selftest.confidence(rec.leads, pulse, checks)
+        if rec.gain_source == "assumed":
+            rec.confidence *= 0.5  # the shape is read, the amplitude scale is a guess
         return rec
 
     def orient_and_read(self, small: np.ndarray, finding: dict) -> tuple[int, list[dict], np.ndarray]:
@@ -126,11 +129,24 @@ class Digitizer:
         scale = up.shape[1] / uw
         prob = self.unet.probability(up) if lay["mask"]["kind"] == "unet" else None
         records = []
-        for i, p in enumerate([q for q in panels if q["kind"] == "ecg"]):
-            records.append(self.panel(up, prob, [round(v * scale) for v in p["box"]], i, texts, scale))
+        ecg = [q for q in panels if q["kind"] == "ecg"]
+        assumed = self.page_gain(texts, [q["box"] for q in ecg])
+        for i, p in enumerate(ecg):
+            records.append(self.panel(up, prob, [round(v * scale) for v in p["box"]], i, texts, scale, assumed))
         return records, up, k
 
-    def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0) -> PanelRecord:
+    def page_gain(self, texts: list[dict], boxes: list[list[float]]) -> float:
+        """The gain most panels of this page print (boxes and texts in the same frame), else the configured default."""
+        allowed = self.cfg["gain"]["allowed"]
+        read = []
+        for b in boxes:
+            inside = [t for t in texts if b[0] <= (t["bbox"][0] + t["bbox"][2]) / 2 <= b[2] and b[1] <= (t["bbox"][1] + t["bbox"][3]) / 2 <= b[3]]
+            g = text.read_gain(inside, allowed)
+            if g is not None:
+                read.append(g)
+        return Counter(read).most_common(1)[0][0] if read else self.cfg["gain"]["assumed"]
+
+    def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None) -> PanelRecord:
         lay, cfg = self.layout, self.cfg
         mx, my = cfg["panel_margin_px"]
         x0, y0, x1, y1 = box
@@ -156,6 +172,8 @@ class Digitizer:
             if gain is None:
                 found = [p for g in cfg["gain"]["allowed"] for p in pulses.find_pulses(gray, grid, g, window, lay["pulses"])]
                 gain, source = pulses.gain_from_pulses([p["height_mm"] for p in found], cfg["gain"]["allowed"], cfg["gain"]["tolerance"]), "pulse"
+            if gain is None and assumed_gain is not None:  # GE style panels print no gain: keep the trace, say the scale is assumed
+                gain, source = assumed_gain, "assumed"
             if gain is None:
                 raise ValueError("gain not read and no calibration pulse found")
             found = pulses.find_pulses(gray, grid, gain, window, lay["pulses"])

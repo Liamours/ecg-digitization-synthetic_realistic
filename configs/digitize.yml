@@ -16,6 +16,7 @@ selftest:
   max_lag_bins: 40
 gain:
   allowed: [5.0, 10.0]
+  assumed: 10.0   # used when a panel prints no gain and the page read none: the clinical default
   tolerance: 0.2
 unet:
   repo: ../../external/Open-ECG-Digitizer
