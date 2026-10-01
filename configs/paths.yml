@@ -4,13 +4,13 @@ roots:
   inferences: ../../inferences
   logs: ../../logs
   external: ../../external
-datasets:   # alias: folder name under datasets/. After renaming a folder on disk, change its name here and nothing else in this repo
-  original: ekg-realistic_pages_original
-  retake: ekg-realistic_pages_retake
+datasets:   # alias: folder name under datasets/. The alias is the folder name without its ecg-/ekg- prefix. After renaming a folder on disk, change the right-hand name here and nothing else in this repo
+  mac400-phone_photo: ecg-mac400-phone_photo
+  mac400-scan: ecg-mac400-scan
   esta: ekg-esta
-  legacy: ekg-legacy_2024
-  synthetic_a: ecg-synthetic_realistic-sample_50
-  synthetic_b: ecg-synthetic_realistic-sample_50b
-  ptbxl: ptb-xl
-  templates: panel_templates
-  textures: table_textures
+  legacy_2024: ekg-legacy_2024
+  synthetic-260930-1856: ecg-synthetic-260930-1856
+  synthetic-260930-2311: ecg-synthetic-260930-2311
+  ptb-xl: ptb-xl
+  panel_templates: panel_templates
+  table_textures: table_textures

@@ -1,6 +1,6 @@
 """Where the data lives. Roots and dataset aliases come from configs/paths.yml, so a folder rename changes one line there.
 
-A path string may start with @: `@logs`, `@inferences/run1` (a root) or `@retake/scan_29/x.jpg` (a dataset alias). Other strings stay plain paths.
+A path string may start with @: `@logs`, `@inferences/run1` (a root) or `@mac400-scan/scan_29/x.jpg` (a dataset alias). Other strings stay plain paths.
 """
 from pathlib import Path
 

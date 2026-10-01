@@ -7,9 +7,9 @@ has_ecg is True when the page matches a device style or its ink fraction
 reaches `ecg_ink_fraction`, which catches ECG strips pasted on a form and ECG
 from unlisted devices.
 
-`ekg-realistic_pages_original`: two columns appended to its manifest.
+`ecg-mac400-phone_photo`: two columns appended to its manifest.
 `ekg-esta`: manifest created (it had none), one row per image and per PDF.
-`ekg-realistic_pages_retake`: manifest rebuilt to cover every image on disk;
+`ecg-mac400-scan`: manifest rebuilt to cover every image on disk;
 its old rows keep their page_id, original_filename, md5 and duplicate info,
 and get their relative_path corrected to the subfolder the file now sits in.
 
@@ -80,8 +80,8 @@ def image_files(root: Path, cfg: dict) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.suffix.lower() in cfg["image_suffixes"] and "_labels" not in p.relative_to(root).parts)
 
 
-def build_original(cfg: dict, stamp: str) -> None:
-    root = paths.dataset("original")
+def build_phone_photo(cfg: dict, stamp: str) -> None:
+    root = paths.dataset("mac400-phone_photo")
     path = root / "_labels" / "manifest.csv"
     rows = read_csv(path)
     styles = load_styles(cfg, root.name)
@@ -115,14 +115,14 @@ def build_esta(cfg: dict, stamp: str) -> None:
     write_csv(out, fields, rows)
 
 
-def build_retake(cfg: dict, stamp: str) -> None:
-    root = paths.dataset("retake")
+def build_scan(cfg: dict, stamp: str) -> None:
+    root = paths.dataset("mac400-scan")
     path = root / "_labels" / "manifest.csv"
     old = read_csv(path)
     styles = load_styles(cfg, root.name)
     files = image_files(root, cfg)
     by_md5 = {}
-    for p in tqdm(files, desc="ekg-realistic_pages_retake"):
+    for p in tqdm(files, desc="ecg-mac400-scan"):
         by_md5[md5(p)] = p
     rows, used = [], set()
     for r in old:
@@ -131,7 +131,7 @@ def build_retake(cfg: dict, stamp: str) -> None:
         if p:
             used.add(rel)
         rows.append({**r, "relative_path": rel, **style_columns(styles.get(rel) if rel else None, ink_fraction(root / rel) if rel else None, cfg)})
-    next_id = 1 + max(int(r["page_id"].split("_")[1]) for r in old if "dup" not in r["page_id"])
+    next_id = 1 + max(int(r["page_id"].rsplit("_", 1)[1]) for r in old if "dup" not in r["page_id"])
     for md5_, p in by_md5.items():
         rel = p.relative_to(root).as_posix()
         if rel in used:
@@ -140,7 +140,7 @@ def build_retake(cfg: dict, stamp: str) -> None:
             width, height = im.size
             dpi = round(im.info["dpi"][0]) if "dpi" in im.info else ""
         rows.append({
-            "page_id": f"retake_{next_id:04d}", "relative_path": rel, "original_filename": p.name, "md5": md5_,
+            "page_id": f"mac400-scan_{next_id:04d}", "relative_path": rel, "original_filename": p.name, "md5": md5_,
             "is_duplicate": "False", "duplicate_of": "", "width_px": width, "height_px": height, "dpi": dpi,
             **style_columns(styles.get(rel), ink_fraction(p), cfg),
         })
@@ -155,9 +155,9 @@ def main() -> None:
     ap.add_argument("--config", type=Path, required=True)
     cfg = yaml.safe_load(ap.parse_args().config.read_text(encoding="utf-8"))
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
-    build_original(cfg, stamp)
+    build_phone_photo(cfg, stamp)
     build_esta(cfg, stamp)
-    build_retake(cfg, stamp)
+    build_scan(cfg, stamp)
 
 
 if __name__ == "__main__":

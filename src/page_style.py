@@ -85,18 +85,18 @@ def main() -> None:
     log_dir = paths.resolve(cfg["log_dir"])
     log_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
-        filename=log_dir / f"page_style-{args.dataset}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
+        filename=log_dir / f"page_style-{root.name}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
         format="%(asctime)s %(message)s", encoding="utf-8",
     )
 
     files = sorted(p for p in root.rglob("*") if p.suffix.lower() in IMAGE_SUFFIXES)
     if args.limit:
         files = random.Random(cfg["seed"]).sample(files, min(args.limit, len(files)))
-    out = out_dir / f"{args.dataset}.csv"
+    out = out_dir / f"{root.name}.csv"
     done = read_done(out)
     pending = [p for p in files if p.relative_to(root).as_posix() not in done]
     log.info("%s: %d images, %d already labeled, %d pending, %d workers x %d threads, max_side %d, retry at %d",
-             args.dataset, len(files), len(files) - len(pending), len(pending), cfg["workers"], cfg["threads_per_worker"], cfg["max_side"], cfg["retry_max_side"])
+             root.name, len(files), len(files) - len(pending), len(pending), cfg["workers"], cfg["threads_per_worker"], cfg["max_side"], cfg["retry_max_side"])
     if not pending:
         return
     if not out.exists():
@@ -108,7 +108,7 @@ def main() -> None:
             out.open("a", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         futures = {ex.submit(_label_page, str(p), cfg["max_side"], cfg["retry_max_side"], cfg["styles"], cfg["unknown_label"]): p for p in pending}
-        for n, fut in enumerate(tqdm(as_completed(futures), total=len(futures), desc=args.dataset), 1):
+        for n, fut in enumerate(tqdm(as_completed(futures), total=len(futures), desc=root.name), 1):
             p = futures[fut]
             try:
                 style, matched = fut.result()
@@ -116,14 +116,14 @@ def main() -> None:
                 errors += 1
                 log.error("%s failed: %r", p, exc)
                 continue
-            writer.writerow([args.dataset, p.relative_to(root).as_posix(), style, "|".join(matched)])
+            writer.writerow([root.name, p.relative_to(root).as_posix(), style, "|".join(matched)])
             fh.flush()
             counts[style] += 1
             if time.time() - last >= cfg["log_every_s"]:
                 rate = n / (time.time() - t0)
-                log.info("%s: %d/%d, %.1f pages/min, ETA %s", args.dataset, n, len(futures), rate * 60, timedelta(seconds=int((len(futures) - n) / rate)))
+                log.info("%s: %d/%d, %.1f pages/min, ETA %s", root.name, n, len(futures), rate * 60, timedelta(seconds=int((len(futures) - n) / rate)))
                 last = time.time()
-    log.info("%s finished in %s: %s, %d errors", args.dataset, timedelta(seconds=int(time.time() - t0)), dict(counts), errors)
+    log.info("%s finished in %s: %s, %d errors", root.name, timedelta(seconds=int(time.time() - t0)), dict(counts), errors)
 
 
 if __name__ == "__main__":

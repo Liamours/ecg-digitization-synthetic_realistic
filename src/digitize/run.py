@@ -54,7 +54,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--exclude", nargs="*", default=[], help="skip paths containing any of these strings")
     ap.add_argument("--report", action="store_true", help="write report.png (page with boxes, plus every lead) in each page folder")
-    ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @retake/scan_29 style aliases work, see configs/paths.yml")
+    ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @mac400-scan/scan_29 style aliases work, see configs/paths.yml")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     layout = load_layout(args.layout)

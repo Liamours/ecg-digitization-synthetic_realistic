@@ -128,7 +128,7 @@ def test_paths_resolve_roots_and_dataset_aliases():
     from src import paths
 
     assert paths.resolve("@logs") == paths.root("logs")
-    assert paths.resolve("@retake/scan_29/a.jpg") == paths.dataset("retake") / "scan_29" / "a.jpg"
+    assert paths.resolve("@mac400-scan/scan_29/a.jpg") == paths.dataset("mac400-scan") / "scan_29" / "a.jpg"
     assert paths.dataset("some_unlisted_folder") == paths.root("datasets") / "some_unlisted_folder"
     assert str(paths.resolve("plain/relative.txt")) == str(Path("plain/relative.txt"))
-    assert paths.dataset("retake").is_dir() and paths.dataset("synthetic_a").is_dir()
+    assert paths.dataset("mac400-scan").is_dir() and paths.dataset("synthetic-260930-1856").is_dir() and paths.dataset("mac400-scan") == paths.dataset("ecg-mac400-scan")
