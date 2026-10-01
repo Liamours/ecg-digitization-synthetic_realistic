@@ -120,3 +120,15 @@ def test_entry_points_import():
     import src.digitize.report  # noqa: F401
     import src.digitize.run  # noqa: F401
     import src.digitize.score  # noqa: F401
+
+
+def test_paths_resolve_roots_and_dataset_aliases():
+    from pathlib import Path
+
+    from src import paths
+
+    assert paths.resolve("@logs") == paths.root("logs")
+    assert paths.resolve("@retake/scan_29/a.jpg") == paths.dataset("retake") / "scan_29" / "a.jpg"
+    assert paths.dataset("some_unlisted_folder") == paths.root("datasets") / "some_unlisted_folder"
+    assert str(paths.resolve("plain/relative.txt")) == str(Path("plain/relative.txt"))
+    assert paths.dataset("retake").is_dir() and paths.dataset("synthetic_a").is_dir()

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
+from src import paths
 from src.digitize.report import read_leads
 from src.orient import rotate_box
 from src.panels import iou
@@ -56,8 +57,8 @@ def read_rows(path: Path) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", type=Path, required=True)
-    ap.add_argument("--run", type=Path, required=True)
+    ap.add_argument("--dataset", type=paths.resolve, required=True)
+    ap.add_argument("--run", type=paths.resolve, required=True)
     ap.add_argument("--min-visible", type=float, default=0.5, help="a ground-truth panel with less of its box on the page is not expected to be found")
     ap.add_argument("--iou", type=float, default=0.5)
     args = ap.parse_args()

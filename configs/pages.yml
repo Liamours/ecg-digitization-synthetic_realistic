@@ -1,4 +1,4 @@
-out_dir: ../../inferences/docling_inference/pipeline_run
+out_dir: '@inferences/docling_inference/pipeline_run'
 max_side: 2500
 seed: 42
 min_text_len: 4

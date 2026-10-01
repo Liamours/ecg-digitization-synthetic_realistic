@@ -22,6 +22,7 @@ import numpy as np
 import yaml
 from tqdm import tqdm
 
+from src import paths
 from src.digitize import report, reverse
 from src.digitize.pipeline import Digitizer, load_image, load_layout
 
@@ -47,20 +48,20 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", type=Path, required=True)
     ap.add_argument("--layout", required=True, help="layout name in configs/layouts or a path to a layout file")
-    ap.add_argument("--out-dir", type=Path, required=True)
-    ap.add_argument("--list", type=Path, help="text file with one image path per line")
+    ap.add_argument("--out-dir", type=paths.resolve, required=True)
+    ap.add_argument("--list", type=paths.resolve, help="text file with one image path per line")
     ap.add_argument("--sample", type=int, help="digitize N pages drawn from the inputs, the same N for the same seed")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--exclude", nargs="*", default=[], help="skip paths containing any of these strings")
     ap.add_argument("--report", action="store_true", help="write report.png (page with boxes, plus every lead) in each page folder")
-    ap.add_argument("inputs", type=Path, nargs="*")
+    ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @retake/scan_29 style aliases work, see configs/paths.yml")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     layout = load_layout(args.layout)
-    Path(cfg["log_dir"]).mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(filename=Path(cfg["log_dir"]) / f"digitize-{layout['name']}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
+    paths.resolve(cfg["log_dir"]).mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(filename=paths.resolve(cfg["log_dir"]) / f"digitize-{layout['name']}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
                         format="%(asctime)s %(message)s", encoding="utf-8")
-    listed = [Path(x) for x in args.list.read_text(encoding="utf-8").splitlines() if x.strip()] if args.list else []
+    listed = [paths.resolve(x.strip()) for x in args.list.read_text(encoding="utf-8").splitlines() if x.strip()] if args.list else []
     pool = [f for f in collect(args.inputs) + listed if not any(x in str(f) for x in args.exclude)]
     if args.sample:
         pool = random.Random(args.seed).sample(pool, min(args.sample, len(pool)))

@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw
 from tqdm import tqdm
 
 from src.orient import choose_rotation, rotate_box
+from src import paths
 from src.panels import find_panels
 from src.text_read import load_upright, read_texts
 
@@ -34,10 +35,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", type=Path, required=True)
     ap.add_argument("--limit", type=int)
-    ap.add_argument("inputs", type=Path, nargs="+")
+    ap.add_argument("inputs", type=paths.resolve, nargs="+")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
-    out = Path(cfg["out_dir"])
+    out = paths.resolve(cfg["out_dir"])
     out.mkdir(parents=True, exist_ok=True)
     converter = DocumentConverter()
     summary = out / "summary.csv"

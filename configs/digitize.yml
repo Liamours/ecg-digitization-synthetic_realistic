@@ -19,8 +19,8 @@ gain:
   assumed: 10.0   # used when a panel prints no gain and the page read none: the clinical default
   tolerance: 0.2
 unet:
-  repo: ../../external/Open-ECG-Digitizer
+  repo: '@external/Open-ECG-Digitizer'
   weights: weights/unet_weights_07072025.pt
   max_side: 3000
   threshold: 0.235
-log_dir: ../../logs
+log_dir: '@logs'

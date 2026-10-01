@@ -23,6 +23,7 @@ import numpy as np
 import yaml
 from tqdm import tqdm
 
+from src import paths
 from src.image_io import load_upright
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
@@ -73,15 +74,15 @@ def read_done(csv_path: Path) -> set[str]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", type=Path, required=True)
-    ap.add_argument("--dataset", required=True)
+    ap.add_argument("--dataset", required=True, help="dataset alias or folder name, see configs/paths.yml")
     ap.add_argument("--limit", type=int)
-    ap.add_argument("--out-dir", type=Path, help="overrides out_dir in the config, e.g. for a validation run")
+    ap.add_argument("--out-dir", type=paths.resolve, help="overrides out_dir in the config, e.g. for a validation run")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
-    root = Path(cfg["datasets_dir"]) / args.dataset
-    out_dir = args.out_dir or Path(cfg["out_dir"])
+    root = paths.dataset(args.dataset)
+    out_dir = args.out_dir or paths.resolve(cfg["out_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
-    log_dir = Path(cfg["log_dir"])
+    log_dir = paths.resolve(cfg["log_dir"])
     log_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         filename=log_dir / f"page_style-{args.dataset}-{datetime.now():%Y%m%d}.log", level=logging.INFO,

@@ -28,6 +28,7 @@ import yaml
 from PIL import Image
 from tqdm import tqdm
 
+from src import paths
 from src.ink_fraction import ink_fraction
 
 Image.MAX_IMAGE_PIXELS = None
@@ -72,7 +73,7 @@ def style_columns(entry: tuple[str, str] | None, ink: float | None, cfg: dict) -
 
 
 def load_styles(cfg: dict, dataset: str) -> dict[str, tuple[str, str]]:
-    return {r["relative_path"]: (r["page_style"], r["matched"]) for r in read_csv(Path(cfg["page_style_dir"]) / f"{dataset}.csv")}
+    return {r["relative_path"]: (r["page_style"], r["matched"]) for r in read_csv(paths.resolve(cfg["page_style_dir"]) / f"{dataset}.csv")}
 
 
 def image_files(root: Path, cfg: dict) -> list[Path]:
@@ -80,7 +81,7 @@ def image_files(root: Path, cfg: dict) -> list[Path]:
 
 
 def build_original(cfg: dict, stamp: str) -> None:
-    root = Path(cfg["datasets_dir"]) / "ekg-realistic_pages_original"
+    root = paths.dataset("original")
     path = root / "_labels" / "manifest.csv"
     rows = read_csv(path)
     styles = load_styles(cfg, root.name)
@@ -91,7 +92,7 @@ def build_original(cfg: dict, stamp: str) -> None:
 
 
 def build_esta(cfg: dict, stamp: str) -> None:
-    root = Path(cfg["datasets_dir"]) / "ekg-esta"
+    root = paths.dataset("esta")
     styles = load_styles(cfg, root.name)
     files = sorted(p for p in root.rglob("*") if p.is_file() and "_labels" not in p.relative_to(root).parts)
     rows = []
@@ -115,7 +116,7 @@ def build_esta(cfg: dict, stamp: str) -> None:
 
 
 def build_retake(cfg: dict, stamp: str) -> None:
-    root = Path(cfg["datasets_dir"]) / "ekg-realistic_pages_retake"
+    root = paths.dataset("retake")
     path = root / "_labels" / "manifest.csv"
     old = read_csv(path)
     styles = load_styles(cfg, root.name)

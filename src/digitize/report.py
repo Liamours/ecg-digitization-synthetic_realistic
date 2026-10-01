@@ -18,6 +18,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from tqdm import tqdm  # noqa: E402
 
+from src import paths  # noqa: E402
+
 
 def read_leads(csv_path: Path) -> tuple[np.ndarray, dict[str, tuple[np.ndarray, str]]]:
     with csv_path.open(encoding="utf-8") as fh:
@@ -66,7 +68,7 @@ def make(page_dir: Path, max_side: int = 1500) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out-dir", type=Path, required=True)
+    ap.add_argument("--out-dir", type=paths.resolve, required=True)
     args = ap.parse_args()
     pages = [args.out_dir] if (args.out_dir / "page.json").exists() else sorted(p.parent for p in args.out_dir.glob("*/page.json"))
     for p in tqdm(pages, desc="reports"):

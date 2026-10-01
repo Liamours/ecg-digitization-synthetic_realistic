@@ -13,6 +13,7 @@ import numpy as np
 import yaml
 from PIL import Image, ImageOps
 
+from src import paths
 from src.digitize import leads as leadmod
 from src.digitize import mask as maskmod
 from src.digitize import ocr, pulses, selftest, text
@@ -56,7 +57,7 @@ class Digitizer:
     @property
     def unet(self) -> maskmod.UNetMask:
         if self._unet is None:
-            self._unet = maskmod.UNetMask({**self.cfg["unet"], "repo": (ROOT / self.cfg["unet"]["repo"]), "device": self.cfg["device"]})
+            self._unet = maskmod.UNetMask({**self.cfg["unet"], "repo": paths.resolve(self.cfg["unet"]["repo"]), "device": self.cfg["device"]})
         return self._unet
 
     # ---- shared -------------------------------------------------------------------------------------------------

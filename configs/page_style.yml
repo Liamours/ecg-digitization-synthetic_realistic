@@ -1,6 +1,6 @@
-datasets_dir: ../../datasets
-out_dir: ../../inferences/page_style
-log_dir: ../../logs
+datasets_dir: '@datasets'
+out_dir: '@inferences/page_style'
+log_dir: '@logs'
 max_side: 800
 retry_max_side: 2500
 workers: 6
