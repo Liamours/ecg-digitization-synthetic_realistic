@@ -19,15 +19,15 @@ def _drop_small(mask: np.ndarray, min_extent: int | None = None, min_area: int |
 
 
 def drop_printed_text(m: np.ndarray, boxes: list[list[float]], max_px: float, pad_px: float) -> np.ndarray:
-    """Remove glyph-sized components that sit inside an OCR text box: printed date, time, rate and device text is not trace.
+    """Remove components that sit inside an OCR text box: printed date, time, rate and device text is not trace.
 
-    A component stays when it is larger than `max_px` in either direction (the trace itself) or when less than 60 percent
-    of its box lies inside a text box (a trace fragment that only passes near a text box)."""
+    Only boxes no taller than `max_px` count as text lines (a taller box is OCR noise over the trace). Touching letters
+    form components as wide as a word, so the size of the component is not limited; a component stays when less than 60
+    percent of its box lies inside a text box (the trace itself, or a fragment that only passes near a text box)."""
     n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    boxes = [b for b in boxes if b[3] - b[1] <= max_px]
     for i in range(1, n):
         x, y, w, h, _a = st[i]
-        if max(w, h) > max_px:
-            continue
         for b in boxes:
             iw = min(x + w, b[2] + pad_px) - max(x, b[0] - pad_px)
             ih = min(y + h, b[3] + pad_px) - max(y, b[1] - pad_px)
@@ -50,7 +50,7 @@ def drop_solid_blobs(m: np.ndarray, min_px: float, fill: float, max_px: float = 
 
 
 def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[int, int], pulse_boxes: list[list[int]], cfg: dict,
-                   text_boxes: list[list[float]] | None = None, px_per_mm: float | None = None) -> np.ndarray:
+                   text_boxes: list[list[float]] | None = None, px_per_mm: float | None = None, label_boxes: list[list[float]] | None = None) -> np.ndarray:
     """MAC 400 style: dark pixels between header and footer, minus the calibration pulses and the lead-name glyphs."""
     m = (gray < cfg["gray_max"]).astype(np.uint8)
     if px_per_mm and "dark_share_max" in cfg and m.mean() > cfg["dark_share_max"]:  # a shadowed crop: the fixed threshold marks the paper itself, judge each pixel against its own surroundings
@@ -75,6 +75,14 @@ def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[in
     core[:, label_cols[1]:] = 0
     reach = 2 * cfg["glyph_reach"] + 1
     m[cv2.dilate(core, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (reach, reach))) > 0] = 0
+    if label_boxes and px_per_mm and "label_core" in cfg:  # read lead names: their thick strokes go, wherever the label sits on a tilted page
+        pad = int(cfg["label_pad_mm"] * px_per_mm)
+        lcore = np.zeros_like(core)
+        for bx0, by0, bx1, by1 in label_boxes:
+            sy, sx = slice(max(int(by0) - pad, 0), int(by1) + pad), slice(max(int(bx0) - pad, 0), int(bx1) + pad)
+            lcore[sy, sx] = dist[sy, sx] >= cfg["label_core"]
+        lreach = 2 * cfg["label_reach"] + 1
+        m[cv2.dilate(lcore, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (lreach, lreach))) > 0] = 0
     if px_per_mm and "text_blob_max_mm" in cfg:
         m = drop_printed_text(m, text_boxes or [], cfg["text_blob_max_mm"] * px_per_mm, cfg["text_box_pad_mm"] * px_per_mm)
         m = drop_solid_blobs(m, cfg["solid_min_mm"] * px_per_mm, cfg["solid_fill"], cfg["solid_max_mm"] * px_per_mm)

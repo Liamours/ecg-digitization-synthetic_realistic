@@ -194,10 +194,13 @@ class Digitizer:
                 mask[:zone[0]] = 0
                 mask[zone[1]:] = 0
             else:
-                lab_cols = text.label_columns(texts, tuple(lay["labels"]["fallback_columns"]), lay["labels"])
                 label_re = re.compile(lay["labels"]["label_regex"])
+                from_page = [{"text": t["text"], "bbox": [scale * t["bbox"][0] - cx0, scale * t["bbox"][1] - cy0, scale * t["bbox"][2] - cx0, scale * t["bbox"][3] - cy0]}
+                             for t in (page_texts or []) if label_re.match(t["text"].strip()) and cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]
+                names = [t for t in texts + from_page if label_re.match(t["text"].strip())]  # the crop read and the page read, in crop pixels
+                lab_cols = text.label_columns(texts, tuple(lay["labels"]["fallback_columns"]), lay["labels"])
                 printed = [t["bbox"] for t in texts if not label_re.match(t["text"].strip()) and len(re.sub(r"\W", "", t["text"])) >= 2]
-                mask = maskmod.threshold_mask(gray, zone, lab_cols, [p["bbox"] for p in found], lay["mask"], printed, grid.px_per_mm[0])
+                mask = maskmod.threshold_mask(gray, zone, lab_cols, [p["bbox"] for p in found], lay["mask"], printed, grid.px_per_mm[0], [t["bbox"] for t in names])
             mask[:, :x0 - cx0] = 0
             mask[:, x1 - cx0:] = 0
             mask = cut_at_gap(mask, lay["cut_gap_px"])

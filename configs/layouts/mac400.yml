@@ -38,10 +38,13 @@ mask:
   contrast_min: 90   # gray levels darker than the local paper
   contrast_gray_max: 190
   bg_kernel_mm: 5.0   # wider than any trace stroke
-  text_blob_max_mm: 6.0   # a printed character or word fragment is smaller than this in both directions
+  text_blob_max_mm: 8.0   # tallest OCR box taken for a line of printed text (cap height is 2.5 mm)
   text_box_pad_mm: 0.5
   solid_min_mm: 2.0   # thick filled blobs (header icon, stains) are not trace
   solid_fill: 0.6
+  label_core: 2.5   # inside a read lead name box, strokes at least this many px from the edge are glyph, not trace
+  label_pad_mm: 1.0
+  label_reach: 3
   solid_max_mm: 15.0   # the header icon is about 10 mm; anything longer is a shadow
   dark_share_max: 0.15   # share of a panel crop below gray_max above which the crop counts as shadowed
   dark_ratio: 0.6   # in a shadowed crop a trace pixel is darker than this fraction of its local background
