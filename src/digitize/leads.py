@@ -118,3 +118,28 @@ def track_leads_overlap(mask: np.ndarray, bands: list[tuple[int, int]]) -> tuple
                 base[i] += FOLLOW_RATE * ((a + b) / 2 - base[i])
         crossings += crossed
     return out, crossings / max(len(cols), 1)
+
+
+def trim_early_starts(masks: list[np.ndarray], grid, min_lead_mm: float, margin_mm: float) -> list[np.ndarray]:
+    """Cut a lead's pixels that lie left of where the other leads begin: the calibration step sits in front of the trace in one row.
+
+    A lead whose first pixels start more than `min_lead_mm` left of the median start of all leads loses everything left of
+    that median (minus `margin_mm`). Fewer than three leads: nothing is cut, there is no median to trust.
+    """
+    if len(masks) < 3:
+        return masks
+    xs = []
+    for m in masks:
+        ys, cx = np.nonzero(m)
+        xs.append(grid.to_mm(np.column_stack([cx, ys]).astype(np.float64))[:, 0] if len(cx) else np.array([np.inf]))
+    starts = np.array([np.percentile(x, 0.5) for x in xs])
+    ref = float(np.median(starts[np.isfinite(starts)]))
+    out = []
+    for m, x, s in zip(masks, xs, starts):
+        if np.isfinite(s) and s < ref - min_lead_mm:
+            ys, cx = np.nonzero(m)
+            m = m.copy()
+            drop = x < ref - margin_mm
+            m[ys[drop], cx[drop]] = 0
+        out.append(m)
+    return out

@@ -1,6 +1,7 @@
 ocr_threads: 4   # half the logical cores: a long CPU run coincided with a blue screen
 device: cpu      # cpu, cuda, or auto (cuda when torch sees a GPU)
 page_ocr_side: 2500
+work_side: 3600   # px, long side a page is scaled down to once at load; 300 dpi letter scans are 3300
 merge_page_text: true   # when the panel crop read no lead name, use the ones the page read found
 overlay_max_side: 2200   # px, long side of the saved overlay jpgs
 panel_margin_px: [90, 20]
@@ -9,9 +10,16 @@ sampling:
   min_bin_px: 1.2
   mm_per_s: 25.0
   baseline_window_bins: 120
+trim:   # a lead starting this far left of the others carries the calibration step; it is cut at where the others start
+  early_start_mm: 5.0
+  margin_mm: 0.5
 flags:
   coverage_min: 0.9
   p2p_max_mv: 6.0  # precordial leads reach 4 mV in this population; lead-off artifacts exceed it
+checks:   # limits of src.digitize.checks; 0.8 is the 10th percentile of the Einthoven correlation on the ground-truth I, II, III signals of both synthetic sets (109 panels, median 0.99)
+  pulse_tol_mv: 0.2
+  einthoven_min_corr: 0.8
+  max_lag_bins: 40
 selftest:
   max_lag_bins: 40
 gain:

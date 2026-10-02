@@ -15,7 +15,7 @@ def find_pulses(gray: np.ndarray, grid: Grid, gain: float, window: tuple[int, in
     out = []
     for i in range(1, n):
         x, y, w, h, area = st[i]
-        if not (cfg["height_tolerance"][0] * gain <= h / px_mm_y <= cfg["height_tolerance"][1] * gain and cfg["width_mm"][0] <= w / px_mm_x <= cfg["width_mm"][1] and area > cfg["min_area"]):
+        if not (cfg["height_tolerance"][0] * gain <= h / px_mm_y <= cfg["height_tolerance"][1] * gain and cfg["width_mm"][0] <= w / px_mm_x <= cfg["width_mm"][1] and area > cfg["min_area"] and area <= cfg.get("solid_fill_max", 1.0) * w * h):  # the pulse is an outline, a filled square is the header icon
             continue
         ys, xs = np.nonzero(lab == i)
         mm = grid.to_mm(np.column_stack([xs, ys]).astype(np.float64))[:, 1]

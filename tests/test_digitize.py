@@ -116,6 +116,7 @@ def test_waveform_score():
 
 def test_entry_points_import():
     """The command line modules are not otherwise imported by the tests, so a syntax slip in one would go unseen."""
+    import src.digitize.checks  # noqa: F401
     import src.digitize.pipeline  # noqa: F401
     import src.digitize.report  # noqa: F401
     import src.digitize.run  # noqa: F401
@@ -132,3 +133,74 @@ def test_paths_resolve_roots_and_dataset_aliases():
     assert paths.dataset("some_unlisted_folder") == paths.root("datasets") / "some_unlisted_folder"
     assert str(paths.resolve("plain/relative.txt")) == str(Path("plain/relative.txt"))
     assert paths.dataset("mac400-scan").is_dir() and paths.dataset("synthetic-260930-1856").is_dir() and paths.dataset("mac400-scan") == paths.dataset("ecg-mac400-scan")
+
+
+def test_calibration_step_in_front_of_one_lead_is_cut():
+    from src.digitize.leads import trim_early_starts
+
+    grid = Grid("dot", np.zeros(2), np.array([10.0, 0.0]), np.array([0.0, 10.0]))  # 10 px per mm
+    masks = []
+    for i in range(3):
+        m = np.zeros((90, 600), np.uint8)
+        m[15 + 30 * i, 100:590] = 1  # the trace starts at 10 mm
+        masks.append(m)
+    masks[1][15 + 30 - 8:15 + 30 + 1, 20:100] = 1  # a step area from 2 mm to 10 mm in the second row
+    out = trim_early_starts(masks, grid, 5.0, 0.5)
+    assert np.nonzero(out[1])[1].min() >= 95 and out[0].sum() == masks[0].sum() and out[2].sum() == masks[2].sum()
+    assert trim_early_starts(masks[:2], grid, 5.0, 0.5)[1].sum() == masks[1].sum()
+
+
+def test_oversized_page_is_scaled_to_the_working_side():
+    from src.digitize.pipeline import fit_side
+
+    big, s = fit_side(np.zeros((7000, 4600, 3), np.uint8), 3600)
+    assert max(big.shape[:2]) == 3600 and abs(s - 3600 / 7000) < 1e-9
+    small, s = fit_side(np.zeros((3300, 2550, 3), np.uint8), 3600)
+    assert small.shape[:2] == (3300, 2550) and s == 1.0
+
+
+def test_checks_script_scores_pulse_and_einthoven(tmp_path):
+    from src.digitize.checks import score_panel
+
+    t = np.arange(0, 6.0, 0.01)
+    i, iii = np.sin(2 * np.pi * 1.2 * t), 0.5 * np.sin(2 * np.pi * 2.3 * t)
+    with (tmp_path / "p.csv").open("w", newline="", encoding="utf-8") as fh:
+        import csv
+
+        w = csv.writer(fh)
+        w.writerow(["t_s", "I_mV", "II_mV", "III_mV", "I_flag", "II_flag", "III_flag"])
+        for k in range(len(t)):
+            w.writerow([t[k], i[k], i[k] + iii[k], iii[k], "ok", "ok", "ok"])
+    cfg = {"pulse_tol_mv": 0.2, "einthoven_min_corr": 0.8, "max_lag_bins": 40}
+    good = score_panel({"pulses_mm": [10.0], "gain_mm_per_mV": 10.0}, tmp_path / "p.csv", cfg)
+    assert good["pulse_ok"] and good["einthoven_ok"]
+    assert not score_panel({"pulses_mm": [5.0], "gain_mm_per_mV": 10.0}, tmp_path / "p.csv", cfg)["pulse_ok"]
+    assert score_panel({}, tmp_path / "missing.csv", cfg)["einthoven_ok"] is None
+
+
+def test_printed_text_and_solid_blobs_leave_the_trace_alone():
+    from src.digitize.mask import drop_printed_text, drop_solid_blobs
+
+    m = np.zeros((100, 400), np.uint8)
+    m[50, 10:390] = 1  # the trace, long and thin
+    m[20:30, 100:104] = 1  # a glyph stroke inside a text box
+    m[22:26, 120:130] = 1  # another glyph inside the same box
+    m[60:90, 300:330] = 1  # a solid icon, away from any text box
+    out = drop_printed_text(m.copy(), [[95, 15, 135, 35]], 60.0, 2.0)
+    assert out[50].sum() == 380 and out[20:30, 100:130].sum() == 0 and out[60:90, 300:330].sum() == 900
+    out = drop_solid_blobs(out, 20.0, 0.6)
+    assert out[60:90, 300:330].sum() == 0 and out[50].sum() == 380
+
+
+def test_pulse_finder_skips_a_filled_square():
+    from src.digitize.pulses import find_pulses
+
+    grid = Grid("dot", np.zeros(2), np.array([10.0, 0.0]), np.array([0.0, 10.0]))  # 10 px per mm
+    gray = np.full((200, 400), 255, np.uint8)
+    gray[50:100, 20:80] = 0   # a filled 6 x 5 mm square, the header icon
+    gray[50:101, 200:204] = 0  # an outline pulse 6 mm wide and 5 mm tall: two vertical strokes and a top and bottom line
+    gray[50:54, 200:260] = 0
+    gray[50:101, 256:260] = 0
+    cfg = {"gray_max": 130, "height_tolerance": [0.85, 1.15], "width_mm": [4.0, 9.0], "min_area": 80, "solid_fill_max": 0.5}
+    found = find_pulses(gray, grid, 5.0, (0, 400, 0, 200), cfg)
+    assert len(found) == 1 and found[0]["bbox"][0] == 200

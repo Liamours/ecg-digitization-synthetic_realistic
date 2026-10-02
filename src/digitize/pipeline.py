@@ -36,9 +36,17 @@ def load_image(path: Path) -> np.ndarray:
     return cv2.cvtColor(np.asarray(ImageOps.exif_transpose(Image.open(path).convert("RGB"))), cv2.COLOR_RGB2BGR)
 
 
+def fit_side(image: np.ndarray, max_side: int) -> tuple[np.ndarray, float]:
+    """Scale a page down once when its long side exceeds `max_side`: the grid finder expects dots about 9 to 15 px apart (a 300 dpi scan), and an 870 dpi scan has them 35 px apart."""
+    s = min(1.0, max_side / max(image.shape[:2]))
+    return (cv2.resize(image, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else image), s
+
+
 def cut_at_gap(mask: np.ndarray, gap_px: int) -> np.ndarray:
     """Keep the run of trace columns from the left; an empty stretch of `gap_px` columns past 40 percent of the width ends this panel's own trace."""
     occ = mask.any(axis=0)
+    if not occ.any():
+        raise ValueError("no trace pixels left in the mask")
     empty = 0
     for x in range(int(np.flatnonzero(occ)[0]), mask.shape[1]):
         empty = 0 if occ[x] else empty + 1
@@ -66,7 +74,9 @@ class Digitizer:
         bands = leadmod.split_rows(mask, rows, rows_mode)
         track = leadmod.track_leads_overlap if self.layout.get("tracking") == "overlap" else leadmod.track_leads
         lead_masks, crossing = track(mask, bands)
-        ys, xs = np.nonzero(mask)
+        trim = self.cfg["trim"]
+        lead_masks = leadmod.trim_early_starts(lead_masks, grid, trim["early_start_mm"], trim["margin_mm"])
+        ys, xs = np.nonzero(np.any(lead_masks, axis=0))
         x_all = grid.to_mm(np.column_stack([xs, ys]).astype(np.float64))[:, 0]
         x_range = (float(np.percentile(x_all, 0.2)), float(np.percentile(x_all, 99.8)))  # stray pixels at a region's edge must not stretch the time axis
         samp = {**self.cfg["sampling"]}
@@ -185,7 +195,9 @@ class Digitizer:
                 mask[zone[1]:] = 0
             else:
                 lab_cols = text.label_columns(texts, tuple(lay["labels"]["fallback_columns"]), lay["labels"])
-                mask = maskmod.threshold_mask(gray, zone, lab_cols, [p["bbox"] for p in found], lay["mask"])
+                label_re = re.compile(lay["labels"]["label_regex"])
+                printed = [t["bbox"] for t in texts if not label_re.match(t["text"].strip()) and len(re.sub(r"\W", "", t["text"])) >= 2]
+                mask = maskmod.threshold_mask(gray, zone, lab_cols, [p["bbox"] for p in found], lay["mask"], printed, grid.px_per_mm[0])
             mask[:, :x0 - cx0] = 0
             mask[:, x1 - cx0:] = 0
             mask = cut_at_gap(mask, lay["cut_gap_px"])

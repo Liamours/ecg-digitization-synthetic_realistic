@@ -26,6 +26,7 @@ pulses:
   height_tolerance: [0.85, 1.15]
   width_mm: [4.0, 9.0]
   min_area: 80
+  solid_fill_max: 0.5
 mask:
   kind: threshold
   gray_max: 130
@@ -34,3 +35,10 @@ mask:
   label_max_width: 70
   glyph_core: 2.5
   glyph_reach: 4
+  contrast_min: 90   # gray levels darker than the local paper
+  contrast_gray_max: 190
+  bg_kernel_mm: 5.0   # wider than any trace stroke
+  text_blob_max_mm: 6.0   # a printed character or word fragment is smaller than this in both directions
+  text_box_pad_mm: 0.5
+  solid_min_mm: 2.0   # thick filled blobs (header icon, stains) are not trace
+  solid_fill: 0.6

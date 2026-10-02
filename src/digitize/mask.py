@@ -18,9 +18,43 @@ def _drop_small(mask: np.ndarray, min_extent: int | None = None, min_area: int |
     return mask
 
 
-def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[int, int], pulse_boxes: list[list[int]], cfg: dict) -> np.ndarray:
+def drop_printed_text(m: np.ndarray, boxes: list[list[float]], max_px: float, pad_px: float) -> np.ndarray:
+    """Remove glyph-sized components that sit inside an OCR text box: printed date, time, rate and device text is not trace.
+
+    A component stays when it is larger than `max_px` in either direction (the trace itself) or when less than 60 percent
+    of its box lies inside a text box (a trace fragment that only passes near a text box)."""
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    for i in range(1, n):
+        x, y, w, h, _a = st[i]
+        if max(w, h) > max_px:
+            continue
+        for b in boxes:
+            iw = min(x + w, b[2] + pad_px) - max(x, b[0] - pad_px)
+            ih = min(y + h, b[3] + pad_px) - max(y, b[1] - pad_px)
+            if iw > 0 and ih > 0 and iw * ih >= 0.6 * w * h:
+                m[lab == i] = 0
+                break
+    return m
+
+
+def drop_solid_blobs(m: np.ndarray, min_px: float, fill: float) -> np.ndarray:
+    """Remove thick filled components (the header icon, stains): a trace is a thin line, its box is mostly empty."""
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        if min(w, h) >= min_px and a >= fill * w * h:
+            m[lab == i] = 0
+    return m
+
+
+def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[int, int], pulse_boxes: list[list[int]], cfg: dict,
+                   text_boxes: list[list[float]] | None = None, px_per_mm: float | None = None) -> np.ndarray:
     """MAC 400 style: dark pixels between header and footer, minus the calibration pulses and the lead-name glyphs."""
     m = (gray < cfg["gray_max"]).astype(np.uint8)
+    if px_per_mm and "contrast_min" in cfg:  # a thin gray trace (a downscaled or faded print) is far darker than the paper around it though not below gray_max
+        k = int(cfg["bg_kernel_mm"] * px_per_mm) | 1
+        bg = cv2.medianBlur(gray, k)
+        m |= ((bg.astype(np.int16) - gray.astype(np.int16) >= cfg["contrast_min"]) & (gray < cfg["contrast_gray_max"])).astype(np.uint8)
     m[:zone[0]] = 0
     m[zone[1]:] = 0
     for x, y, w, h in pulse_boxes:
@@ -36,6 +70,9 @@ def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[in
     core[:, label_cols[1]:] = 0
     reach = 2 * cfg["glyph_reach"] + 1
     m[cv2.dilate(core, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (reach, reach))) > 0] = 0
+    if px_per_mm and "text_blob_max_mm" in cfg:
+        m = drop_printed_text(m, text_boxes or [], cfg["text_blob_max_mm"] * px_per_mm, cfg["text_box_pad_mm"] * px_per_mm)
+        m = drop_solid_blobs(m, cfg["solid_min_mm"] * px_per_mm, cfg["solid_fill"])
     return _drop_small(m, min_area=cfg["min_component"])
 
 

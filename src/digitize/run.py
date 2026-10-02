@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from src import paths
 from src.digitize import report, reverse
-from src.digitize.pipeline import Digitizer, load_image, load_layout
+from src.digitize.pipeline import Digitizer, fit_side, load_image, load_layout
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 log = logging.getLogger("digitize")
@@ -79,7 +79,7 @@ def main() -> None:
         t0 = time.time()
         status, error, n_panels, ok, n_leads = "ok", "", 0, 0, 0
         try:
-            image = load_image(path)
+            image, work_scale = fit_side(load_image(path), cfg["work_side"])
             out.mkdir(parents=True, exist_ok=True)  # a page with no panel still gets its page.json
             if layout["mode"] == "panel":
                 records, up, k = digitizer.run_panel_page(image)
@@ -93,7 +93,7 @@ def main() -> None:
                 save_overlay(out / "overlay_original.jpg", np.rot90(overlay, -(k // 90)).copy(), cfg["overlay_max_side"])
             n_panels, ok, n_leads = len(records), sum(v.flag == "ok" for r in records for v in r.leads.values()), sum(len(r.leads) for r in records)
             # page.json last: it is the done marker, so a crash before it repeats one page and never loses one silently
-            (out / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k,
+            (out / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k, "work_scale": round(work_scale, 4),
                                                        "panels": {r.panel_id: {"confidence": round(r.confidence, 3), "error": r.error, "leads_ok": sum(v.flag == "ok" for v in r.leads.values()), "leads": len(r.leads)} for r in records}}, indent=1), encoding="utf-8")
             if args.report:
                 report.make(out)
