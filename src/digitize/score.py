@@ -131,7 +131,7 @@ def main() -> None:
                 if name not in series[1]:
                     why = "panel unreadable" if not names else "lead label missing"
                     funnel[why] += 1
-                    lead_rows.append([pid, g["id"], name, why, 0, "", "", "", ""])
+                    lead_rows.append([pid, g["id"], name, why, 0, "", "", "", "", pipe[match[i]]["file"].stem, meta["gain_mm_per_mV"]])
                     continue
                 mv, flag = series[1][name]
                 w = waveform_score(np.load(root / row["digitized_path"]), float(row["signal_fs"]), series[0], mv)
