@@ -204,3 +204,13 @@ def test_pulse_finder_skips_a_filled_square():
     cfg = {"gray_max": 130, "height_tolerance": [0.85, 1.15], "width_mm": [4.0, 9.0], "min_area": 80, "solid_fill_max": 0.5}
     found = find_pulses(gray, grid, 5.0, (0, 400, 0, 200), cfg)
     assert len(found) == 1 and found[0]["bbox"][0] == 200
+
+
+def test_solid_filter_keeps_a_shadow_sized_blob():
+    from src.digitize.mask import drop_solid_blobs
+
+    m = np.zeros((300, 300), np.uint8)
+    m[10:40, 10:40] = 1    # icon sized
+    m[100:290, 20:290] = 1  # shadow sized
+    out = drop_solid_blobs(m.copy(), 20.0, 0.6, 60.0)
+    assert out[10:40, 10:40].sum() == 0 and out[100:290, 20:290].sum() == (190 * 270)

@@ -37,12 +37,14 @@ def drop_printed_text(m: np.ndarray, boxes: list[list[float]], max_px: float, pa
     return m
 
 
-def drop_solid_blobs(m: np.ndarray, min_px: float, fill: float) -> np.ndarray:
-    """Remove thick filled components (the header icon, stains): a trace is a thin line, its box is mostly empty."""
+def drop_solid_blobs(m: np.ndarray, min_px: float, fill: float, max_px: float = float("inf")) -> np.ndarray:
+    """Remove thick filled icon-sized components (the header icon, stains): a trace is a thin line, its box is mostly empty.
+
+    A component longer than `max_px` is a shadow or dark paper, not an icon, and stays for the threshold to deal with."""
     n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
     for i in range(1, n):
         x, y, w, h, a = st[i]
-        if min(w, h) >= min_px and a >= fill * w * h:
+        if min(w, h) >= min_px and max(w, h) <= max_px and a >= fill * w * h:
             m[lab == i] = 0
     return m
 
@@ -51,7 +53,10 @@ def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[in
                    text_boxes: list[list[float]] | None = None, px_per_mm: float | None = None) -> np.ndarray:
     """MAC 400 style: dark pixels between header and footer, minus the calibration pulses and the lead-name glyphs."""
     m = (gray < cfg["gray_max"]).astype(np.uint8)
-    if px_per_mm and "contrast_min" in cfg:  # a thin gray trace (a downscaled or faded print) is far darker than the paper around it though not below gray_max
+    if px_per_mm and "dark_share_max" in cfg and m.mean() > cfg["dark_share_max"]:  # a shadowed crop: the fixed threshold marks the paper itself, judge each pixel against its own surroundings
+        bg = cv2.medianBlur(gray, int(cfg["bg_kernel_mm"] * px_per_mm) | 1)
+        m = (gray < cfg["dark_ratio"] * bg).astype(np.uint8)
+    elif px_per_mm and "contrast_min" in cfg:  # a thin gray trace (a downscaled or faded print) is far darker than the paper around it though not below gray_max
         k = int(cfg["bg_kernel_mm"] * px_per_mm) | 1
         bg = cv2.medianBlur(gray, k)
         m |= ((bg.astype(np.int16) - gray.astype(np.int16) >= cfg["contrast_min"]) & (gray < cfg["contrast_gray_max"])).astype(np.uint8)
@@ -72,7 +77,7 @@ def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[in
     m[cv2.dilate(core, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (reach, reach))) > 0] = 0
     if px_per_mm and "text_blob_max_mm" in cfg:
         m = drop_printed_text(m, text_boxes or [], cfg["text_blob_max_mm"] * px_per_mm, cfg["text_box_pad_mm"] * px_per_mm)
-        m = drop_solid_blobs(m, cfg["solid_min_mm"] * px_per_mm, cfg["solid_fill"])
+        m = drop_solid_blobs(m, cfg["solid_min_mm"] * px_per_mm, cfg["solid_fill"], cfg["solid_max_mm"] * px_per_mm)
     return _drop_small(m, min_area=cfg["min_component"])
 
 

@@ -42,3 +42,6 @@ mask:
   text_box_pad_mm: 0.5
   solid_min_mm: 2.0   # thick filled blobs (header icon, stains) are not trace
   solid_fill: 0.6
+  solid_max_mm: 15.0   # the header icon is about 10 mm; anything longer is a shadow
+  dark_share_max: 0.15   # share of a panel crop below gray_max above which the crop counts as shadowed
+  dark_ratio: 0.6   # in a shadowed crop a trace pixel is darker than this fraction of its local background
