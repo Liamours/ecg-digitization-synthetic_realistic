@@ -75,7 +75,7 @@ class Digitizer:
         track = leadmod.track_leads_overlap if self.layout.get("tracking") == "overlap" else leadmod.track_leads
         lead_masks, crossing = track(mask, bands)
         trim = self.cfg["trim"]
-        lead_masks = leadmod.trim_early_starts(lead_masks, grid, trim["early_start_mm"], trim["margin_mm"])
+        lead_masks = leadmod.trim_early_starts(lead_masks, grid, trim["early_start_mm"], trim["margin_mm"], trim.get("late_end_mm"))
         ys, xs = np.nonzero(np.any(lead_masks, axis=0))
         x_all = grid.to_mm(np.column_stack([xs, ys]).astype(np.float64))[:, 0]
         x_range = (float(np.percentile(x_all, 0.2)), float(np.percentile(x_all, 99.8)))  # stray pixels at a region's edge must not stretch the time axis

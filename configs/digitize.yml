@@ -11,7 +11,8 @@ sampling:
   mm_per_s: 25.0
   baseline_window_bins: 120
 trim:   # a lead starting this far left of the others carries the calibration step; it is cut at where the others start
-  early_start_mm: 5.0
+  early_start_mm: 2.0
+  late_end_mm: 2.0   # likewise at the end: a lead running this far past the others loses the overrun
   margin_mm: 0.5
 flags:
   coverage_min: 0.9

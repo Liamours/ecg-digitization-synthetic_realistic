@@ -229,3 +229,18 @@ def test_read_label_box_removes_a_thick_glyph_touching_the_trace():
     assert far[40:60, 150:157].sum() > 0
     near = threshold_mask(gray, (0, 120), (250, 280), [], cfg, None, 10.0, [[145.0, 38.0, 162.0, 60.0]])
     assert near[40:60, 150:157].sum() == 0 and near[70:72, 10:140].sum() > 0
+
+
+def test_overrun_past_the_other_leads_is_cut():
+    from src.digitize.leads import trim_early_starts
+
+    grid = Grid("dot", np.zeros(2), np.array([10.0, 0.0]), np.array([0.0, 10.0]))
+    masks = []
+    for i in range(3):
+        m = np.zeros((90, 600), np.uint8)
+        m[15 + 30 * i, 100:500] = 1
+        masks.append(m)
+    masks[2][60:89, 520:530] = 1   # a spike 2 mm and more past the end of the others
+    masks[2][75, 500:560] = 1
+    out = trim_early_starts(masks, grid, 2.0, 0.5, 2.0)
+    assert np.nonzero(out[2])[1].max() < 560 and np.nonzero(out[2])[1].max() <= 505 and out[0].sum() == masks[0].sum()

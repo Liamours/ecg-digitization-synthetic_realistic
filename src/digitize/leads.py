@@ -120,11 +120,13 @@ def track_leads_overlap(mask: np.ndarray, bands: list[tuple[int, int]]) -> tuple
     return out, crossings / max(len(cols), 1)
 
 
-def trim_early_starts(masks: list[np.ndarray], grid, min_lead_mm: float, margin_mm: float) -> list[np.ndarray]:
+def trim_early_starts(masks: list[np.ndarray], grid, min_lead_mm: float, margin_mm: float, late_end_mm: float | None = None) -> list[np.ndarray]:
     """Cut a lead's pixels that lie left of where the other leads begin: the calibration step sits in front of the trace in one row.
 
     A lead whose first pixels start more than `min_lead_mm` left of the median start of all leads loses everything left of
-    that median (minus `margin_mm`). Fewer than three leads: nothing is cut, there is no median to trust.
+    that median (minus `margin_mm`). With `late_end_mm`, a lead that ends that far right of the median end loses everything
+    right of that median (plus `margin_mm`): a tail spike or stray stroke past the end of the trace. Fewer than three leads:
+    nothing is cut, there is no median to trust.
     """
     if len(masks) < 3:
         return masks
@@ -142,4 +144,20 @@ def trim_early_starts(masks: list[np.ndarray], grid, min_lead_mm: float, margin_
             drop = x < ref - margin_mm
             m[ys[drop], cx[drop]] = 0
         out.append(m)
-    return out
+    if late_end_mm is None:
+        return out
+    ends = []
+    for m in out:
+        ys, cx = np.nonzero(m)
+        ends.append(grid.to_mm(np.column_stack([cx, ys]).astype(np.float64))[:, 0] if len(cx) else np.array([-np.inf]))
+    top = np.array([np.percentile(x, 99.5) for x in ends])
+    ref_end = float(np.median(top[np.isfinite(top)]))
+    done = []
+    for m, x, e in zip(out, ends, top):
+        if np.isfinite(e) and e > ref_end + late_end_mm:
+            ys, cx = np.nonzero(m)
+            m = m.copy()
+            drop = x > ref_end + margin_mm
+            m[ys[drop], cx[drop]] = 0
+        done.append(m)
+    return done
