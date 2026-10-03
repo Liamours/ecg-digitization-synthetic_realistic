@@ -87,7 +87,7 @@ def main() -> None:
                 records, up, k = digitizer.run_fixed_page(image), image, 0
             for r in records:
                 r.save(out)
-            t_rec, signal, lead_labels, image_labels = assemble.page_record(records, cfg["record"])
+            t_rec, signal, lead_labels, image_labels = assemble.page_record(records, cfg["record"], cfg["sampling"]["mm_per_s"])
             assemble.save(out, t_rec, signal, lead_labels, {"source": str(path), "rotation_ccw_deg": k, **image_labels})
             overlay = reverse.draw(up, records, cfg["sampling"])
             save_overlay(out / "overlay_upright.jpg", overlay, cfg["overlay_max_side"])

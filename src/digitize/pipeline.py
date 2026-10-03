@@ -80,10 +80,10 @@ class Digitizer:
         return self._tracenet
 
     # ---- shared -------------------------------------------------------------------------------------------------
-    def digitize_region(self, mask: np.ndarray, grid: Grid, gain: float, labels: list[str], rows: int, rows_mode: str) -> tuple[dict[str, Lead], float]:
-        """Row assignment, sampling, and lead flags for one region's trace mask."""
+    def digitize_region(self, mask: np.ndarray, grid: Grid, gain: float, labels: list[str], rows: int, rows_mode: str, tracking: str | None = None) -> tuple[dict[str, Lead], float]:
+        """Row assignment, sampling, and lead flags for one region's trace mask. `tracking` (baseline or overlap) overrides the layout's."""
         bands = leadmod.split_rows(mask, rows, rows_mode)
-        track = leadmod.track_leads_overlap if self.layout.get("tracking") == "overlap" else leadmod.track_leads
+        track = leadmod.track_leads_overlap if (tracking or self.layout.get("tracking")) == "overlap" else leadmod.track_leads
         lead_masks, crossing = track(mask, bands)
         trim = self.cfg["trim"]
         lead_masks = leadmod.trim_early_starts(lead_masks, grid, trim["early_start_mm"], trim["margin_mm"], trim.get("late_end_mm"))
@@ -216,8 +216,12 @@ class Digitizer:
             front.error = f"{type(exc).__name__}: {exc}"
         return front
 
-    def trace(self, front: PanelFront, prob: np.ndarray | None = None) -> PanelRecord:
-        """Trace mask, lead separation and sampling for a panel whose front part is known."""
+    def trace(self, front: PanelFront, prob: np.ndarray | None = None, mask_kind: str | None = None, tracking: str | None = None) -> PanelRecord:
+        """Trace mask, lead separation and sampling for a panel whose front part is known.
+
+        `mask_kind` (threshold, trace_net, openecg) and `tracking` (baseline, overlap) override the layout, so several methods
+        can be run on the same saved fronts (src.digitize.methods)."""
+        kind = mask_kind or self.layout["mask"]["kind"]
         lay, cfg = self.layout, self.cfg
         (x0, y0, x1, y1), (cx0, cy0), crop, texts = front.box, front.crop_origin, front.crop, front.texts
         cy1, cx1 = cy0 + crop.shape[0], cx0 + crop.shape[1]
@@ -228,12 +232,13 @@ class Digitizer:
         try:
             grid, zone, gain = front.grid, front.zone, front.gain
             rec.grid, rec.gain_mm_per_mv, rec.gain_source, rec.pulses_mm = grid, gain, front.gain_source, [p["height_mm"] for p in front.pulses]
-            if lay["mask"]["kind"] == "trace_net":  # the trained network: text, names, the step and the icon are background by its labels
+            if kind == "trace_net":  # the trained network: text, names, the step and the icon are background by its labels
                 mask = self.tracenet.mask(crop, grid.px_per_mm[0])
                 mask[:max(y0 - cy0, 0)] = 0
                 mask[y1 - cy0:] = 0
-            elif prob is not None:
-                mask = (prob[cy0:cy1, cx0:cx1] > cfg["unet"]["threshold"]).astype(np.uint8)
+            elif kind == "openecg" or prob is not None:  # the pretrained Open-ECG-Digitizer U-Net, on the crop or cut from a page-wide probability
+                p = self.unet.probability(crop) if prob is None else prob[cy0:cy1, cx0:cx1]
+                mask = (p > cfg["unet"]["threshold"]).astype(np.uint8)
                 mask[:zone[0]] = 0
                 mask[zone[1]:] = 0
             else:
@@ -246,7 +251,7 @@ class Digitizer:
             mask[:, :x0 - cx0] = 0
             mask[:, x1 - cx0:] = 0
             mask = cut_at_gap(mask, lay["cut_gap_px"])
-            rec.leads, _ = self.digitize_region(mask, grid, gain, front.labels, lay["rows"], lay["rows_mode"])
+            rec.leads, _ = self.digitize_region(mask, grid, gain, front.labels, lay["rows"], lay["rows_mode"], tracking)
         except Exception as exc:
             rec.error = f"{type(exc).__name__}: {exc}"
         return self.finish(rec)

@@ -118,7 +118,9 @@ def test_entry_points_import():
     """The command line modules are not otherwise imported by the tests, so a syntax slip in one would go unseen."""
     import src.digitize.assemble  # noqa: F401
     import src.digitize.checks  # noqa: F401
+    import src.digitize.compare  # noqa: F401
     import src.digitize.front  # noqa: F401
+    import src.digitize.methods  # noqa: F401
     import src.digitize.metrics  # noqa: F401
     import src.digitize.oracle  # noqa: F401
     import src.digitize.pipeline  # noqa: F401
@@ -279,13 +281,14 @@ def test_page_record_takes_the_best_attempt_and_labels_every_lead():
     t = np.arange(0, 3.0, 0.004)
     wave = np.sin(2 * np.pi * 1.2 * t)
     grid = Grid("dot", np.zeros(2), np.array([10.0, 0.0]), np.array([0.0, 10.0]))
-    mk = lambda name, flag, mv=wave, cov=0.95: Lead(name, t, mv, 0.0, 0.0, cov, 0.0, flag)
+    mk = lambda name, flag, mv=wave, cov=0.95: Lead(name, t, mv, 12.5, 0.0, cov, 0.0, flag)  # the trace starts 12.5 mm into the panel
     first = PanelRecord("panel0", "mac400", [0, 0, 1, 1], [0, 0], ["I", "II", "III"], "ocr", 10.0, "ocr", grid, leads={"I": mk("I", "low_quality", cov=0.5), "II": mk("II", "ok"), "III": mk("III", "ok", np.zeros_like(t))})
     again = PanelRecord("panel1", "mac400", [0, 0, 1, 1], [0, 0], ["I", "II", "III"], "ocr", 10.0, "ocr", grid, leads={"I": mk("I", "ok"), "II": mk("II", "low_quality"), "III": mk("III", "ok")})
     broken = PanelRecord("panel2", "mac400", [0, 0, 1, 1], [0, 0], ["V1", "V2", "V3"], "ocr", None, "", grid, error="ValueError: grid", leads={})
-    tt, signal, leads, image = page_record([first, again, broken], cfg)
+    tt, signal, leads, image = page_record([first, again, broken], cfg, 25.0)
     by = {x["lead"]: x for x in leads}
+    assert np.isnan(signal[0, :240]).all() and np.isfinite(signal[0, 260:1700]).all() and by["I"]["start_s"] == 0.5  # 12.5 mm at 25 mm/s
     assert signal.shape == (12, 2000) and by["I"]["panel"] == "panel1" and by["II"]["panel"] == "panel0" and by["III"]["status"] == "ok" and by["I"]["attempts"] == 2
     assert by["V1"]["status"] == "missing" and image == {"panels": 3, "panels_unreadable": 1, "leads_ok": 3, "leads_low_quality": 0, "leads_flat": 0, "leads_missing": 9, "complete": False, "repeated_leads": 3}
     flat_only = PanelRecord("panel0", "mac400", [0, 0, 1, 1], [0, 0], ["V4", "V5", "V6"], "ocr", 10.0, "ocr", grid, leads={"V4": mk("V4", "ok", np.zeros_like(t))})
-    assert {x["lead"]: x for x in page_record([flat_only], cfg)[2]}["V4"]["status"] == "flat"
+    assert {x["lead"]: x for x in page_record([flat_only], cfg, 25.0)[2]}["V4"]["status"] == "flat"

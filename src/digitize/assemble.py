@@ -1,7 +1,8 @@
 """The page's 12 leads on one time base, with a label per lead and per image.
 
 A page holds several panels of three leads; a lead group may be printed more than once (a repeated attempt). Each lead
-takes its best attempt. Per-lead status: `ok` (passed the quality flag), `low_quality` (digitized but failed it), `flat`
+takes its best attempt. Time zero is the left edge of the lead's panel (25 mm per second along the grid), so the leads
+of a panel stay simultaneous and two methods run on the same panel share one time base. Per-lead status: `ok` (passed the quality flag), `low_quality` (digitized but failed it), `flat`
 (a straight line, what the device prints when the electrode is off) and `missing` (no panel carried it). Written per page:
 record.csv (time_s and one mV column per lead, empty where there is no data) and record.json (image labels, lead labels).
 """
@@ -20,7 +21,13 @@ def lead_status(lead: Lead, flat_p2p_mv: float) -> str:
     return "flat" if lead.p2p_mv < flat_p2p_mv else lead.flag
 
 
-def page_record(records: list[PanelRecord], cfg: dict) -> tuple[np.ndarray, np.ndarray, list[dict], dict]:
+def panel_left_mm(rec: PanelRecord) -> float:
+    """Grid x of the panel box's left edge at mid height: the origin of the panel's time axis."""
+    left = np.array([[rec.box[0] - rec.crop_origin[0], (rec.box[1] + rec.box[3]) / 2 - rec.crop_origin[1]]], np.float64)
+    return float(rec.grid.to_mm(left)[0, 0])
+
+
+def page_record(records: list[PanelRecord], cfg: dict, mm_per_s: float) -> tuple[np.ndarray, np.ndarray, list[dict], dict]:
     """Time base, leads x samples in mV (NaN where there is no data), the lead labels, and the image labels."""
     n = int(round(cfg["duration_s"] * cfg["fs"]))
     t = np.arange(n) / cfg["fs"]
@@ -32,9 +39,10 @@ def page_record(records: list[PanelRecord], cfg: dict) -> tuple[np.ndarray, np.n
             labels.append({"lead": name, "status": "missing", "attempts": 0})
             continue
         rec, lead = max(tries, key=lambda x: (RANK[lead_status(x[1], cfg["flat_p2p_mv"])], x[1].coverage))
-        signal[i] = np.interp(t, lead.t - lead.t[0], lead.mv, right=np.nan)
+        start = (lead.x0_mm - panel_left_mm(rec)) / mm_per_s  # seconds from the panel's left edge to the lead's first sample
+        signal[i] = np.interp(t, start + lead.t, lead.mv, left=np.nan, right=np.nan)
         labels.append({"lead": name, "status": lead_status(lead, cfg["flat_p2p_mv"]), "attempts": len(tries), "panel": rec.panel_id, "gain_mm_per_mV": rec.gain_mm_per_mv, "gain_source": rec.gain_source,
-                       "name_source": rec.label_source, "coverage": round(lead.coverage, 3), "p2p_mV": round(lead.p2p_mv, 3), "duration_s": round(float(lead.t[-1] - lead.t[0]), 2)})
+                       "name_source": rec.label_source, "coverage": round(lead.coverage, 3), "p2p_mV": round(lead.p2p_mv, 3), "start_s": round(start, 2), "duration_s": round(float(lead.t[-1] - lead.t[0]), 2)})
     count = lambda s: sum(x["status"] == s for x in labels)
     image = {"panels": len(records), "panels_unreadable": sum(bool(r.error) for r in records), "leads_ok": count("ok"), "leads_low_quality": count("low_quality"), "leads_flat": count("flat"),
              "leads_missing": count("missing"), "complete": count("ok") == len(cfg["leads"]), "repeated_leads": sum(x["attempts"] > 1 for x in labels)}
