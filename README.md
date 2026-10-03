@@ -91,4 +91,15 @@ uv run --with pytest python -m pytest tests/test_digitize.py
 | `score.py`, `oracle.py`, `metrics.py` | score against a synthetic set's exact labels, runs with true steps, tables in `results/metrics/` |
 | `warp.py`, `reverse.py` | measured warp of the dot lattice; results drawn back on the original image |
 
+## Older code, kept for the record
+
+Not part of the canonical pipeline and not maintained; moved into the repository on 2026-10-03 so that no project code lives outside it.
+
+| Folder | Holds |
+|---|---|
+| `analyses/manual_digitization/` | the hand-built single-page trial of 2026-09-30 that `src/digitize/` grew out of (MAC 400, Fukuda, EDAN pages) |
+| `analyses/doctr_trial/` | the DocTr unwarping trial of 2026-09-30 (dropped) |
+| `scripts/ops/` | helper scripts of earlier long runs: batch loops, resource monitor, process priority, an old training queue |
+| `archive/classical_panel_pipeline/` | the SAM and calibration-square pipeline retired on 2026-09-06, with its own README |
+
 Settings are in `configs/digitize.yml`; the layout (grid, text patterns, mask kind, lead separation, lead sets) in `configs/layouts/mac400.yml`. The Fukuda, EDAN and wide-pitch layouts and the page mode are from before the scope was narrowed to MAC 400 scans and are not maintained.
