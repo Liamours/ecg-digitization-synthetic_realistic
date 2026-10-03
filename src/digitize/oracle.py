@@ -1,7 +1,7 @@
 """Headroom per step: run the digitizer on a synthetic dataset with some steps replaced by the ground truth.
 
-Each mode keeps the earlier ones: `panels` uses the true page rotation and the true panel boxes (no OCR page read, no footer
-anchors), `gain` adds the true gain, `labels` adds the true lead names. Scoring the run with src.digitize.score and
+`panels` uses the true page rotation and the true panel boxes (no OCR page read, no footer anchors), `gain` adds the true gain,
+`labels` adds the true lead names to that, `names` is `panels` plus the true lead names without the true gain. Scoring the run with src.digitize.score and
 comparing it with a normal run shows how much end to end score each step is holding back.
 
 Usage:
@@ -25,7 +25,7 @@ from src import paths
 from src.digitize.pipeline import Digitizer, fit_side, load_image, load_layout
 from src.orient import rotate_box
 
-MODES = ("panels", "gain", "labels")
+MODES = ("panels", "gain", "labels", "names")
 
 
 def read_rows(path: Path) -> list[dict]:
@@ -40,6 +40,7 @@ def main() -> None:
     ap.add_argument("--dataset", type=paths.resolve, required=True)
     ap.add_argument("--mode", choices=MODES, required=True)
     ap.add_argument("--out-dir", type=paths.resolve, required=True)
+    ap.add_argument("--limit", type=int, help="first N pages only, for a quick check")
     ap.add_argument("--min-visible", type=float, default=0.5, help="a panel with less of its box on the page is skipped, as in src.digitize.score")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
@@ -55,12 +56,14 @@ def main() -> None:
     for r in read_rows(lab / "page_boxes.csv"):
         if r["class"] == "panel":
             boxes[r["page_id"]].append(r)
-    todo = [p for p in sorted(boxes) if not (args.out_dir / f"pages__{p}" / "page.json").exists()]
+    todo = [p for p in sorted(boxes)[:args.limit] if not (args.out_dir / f"pages__{p}" / "page.json").exists()]
     args.out_dir.mkdir(parents=True, exist_ok=True)
     progress = args.out_dir / "progress.csv"
     if not progress.exists():
         progress.write_text("page,seconds,panels,leads_ok,leads,status,error\n", encoding="utf-8")
     digitizer = Digitizer(cfg, layout)
+    cache_dir = paths.root("inferences") / "_cache" / "oracle_ocr" / args.dataset.name  # OCR of each panel crop, shared by the modes and by reruns
+    cache_dir.mkdir(parents=True, exist_ok=True)
     recent, t_start = [], time.time()
     for n, pid in enumerate(tqdm(todo, desc=f"oracle {args.mode}"), 1):
         t0 = time.time()
@@ -80,10 +83,17 @@ def main() -> None:
             if vis >= args.min_visible:
                 gt.append((rotate_box(clip, W, H, k), panel_meta[r["panel_id"]]))
         gt.sort(key=lambda g: (g[0][1], g[0][0]))
+        cache = cache_dir / f"{pid}.json"
+        cached = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
+        fresh = {}
         for i, (box, meta) in enumerate(gt):
             gain = float(re.match(r"\d+", meta["gain"]).group()) if args.mode in ("gain", "labels") and re.match(r"\d+", meta["gain"] or "") else None
-            names = meta["row_labels"].split(";") if args.mode == "labels" else None
-            recs.append(digitizer.panel(up, None, [round(v) for v in box], i, None, 1.0, cfg["gain"]["assumed"], force_gain=gain, force_labels=names))
+            names = meta["row_labels"].split(";") if args.mode in ("labels", "names") else None
+            rbox = [round(v) for v in box]
+            key = ",".join(map(str, rbox))
+            recs.append(digitizer.panel(up, None, rbox, i, None, 1.0, cfg["gain"]["assumed"], force_gain=gain, force_labels=names, texts=cached.get(key)))
+            fresh[key] = [{"text": t["text"], "bbox": [t["bbox"][0] - recs[-1].crop_origin[0], t["bbox"][1] - recs[-1].crop_origin[1], t["bbox"][2] - recs[-1].crop_origin[0], t["bbox"][3] - recs[-1].crop_origin[1]]} for t in recs[-1].text_boxes] if cached.get(key) is None else cached[key]
+        cache.write_text(json.dumps(fresh), encoding="utf-8")
         for r in recs:
             r.save(out)
         ok = sum(v.flag == "ok" for r in recs for v in r.leads.values())

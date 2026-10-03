@@ -158,7 +158,7 @@ class Digitizer:
         return Counter(read).most_common(1)[0][0] if read else self.cfg["gain"]["assumed"]
 
     def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None,
-              force_gain: float | None = None, force_labels: list[str] | None = None) -> PanelRecord:
+              force_gain: float | None = None, force_labels: list[str] | None = None, texts: list[dict] | None = None) -> PanelRecord:
         """force_gain and force_labels replace what the page would say; they exist for the oracle runs (src.digitize.oracle)."""
         lay, cfg = self.layout, self.cfg
         mx, my = cfg["panel_margin_px"]
@@ -166,7 +166,8 @@ class Digitizer:
         cx0, cy0, cx1, cy1 = max(x0 - mx, 0), max(y0 - my, 0), min(x1 + mx, up.shape[1]), min(y1 + my, up.shape[0])
         crop = up[cy0:cy1, cx0:cx1]
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
+        if texts is None:  # a caller that read this crop before passes the result
+            texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
         labels, label_source = text.read_labels(texts, lay["label_sets"], index)
         if label_source == "position" and page_texts is not None and cfg.get("merge_page_text"):
             # the crop read no usable lead name: ask the page read before falling back to the template order
