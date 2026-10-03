@@ -3,7 +3,8 @@
 The front stage fixed the page rotation, the panels, lead names, gain and grid map; this reads those files and only does
 the uncertain part, so methods can be compared on identical input. Trace methods (--mask): `openecg` (the pretrained
 Open-ECG-Digitizer U-Net), `trace_net` (the network of src.train_trace_net). Lead separation
-(--split): `baseline` (row bands with a slowly moving baseline), `overlap` (continuity with the previous column).
+(--split): `baseline` (row bands with a slowly moving baseline), `overlap` (continuity with the previous column), and
+the open-source methods of src.digitize.separate (`openecg_lines`, `ecgtizer_lazy`, `ecgtizer_full`, `ecgtizer_fragmented`).
 
 Per page it writes the same files as src.digitize.run (panel json and csv, record.csv, record.json, page.json), so the
 scorer, the checks and the metrics collector read a method folder like any run. Resumable: a page whose page.json
@@ -28,9 +29,10 @@ from src import paths
 from src.digitize import assemble
 from src.digitize.pipeline import Digitizer, load_layout
 from src.digitize.record import PanelFront
+from src.digitize.separate import METHODS
 
 MASKS = ("openecg", "trace_net")
-SPLITS = ("baseline", "overlap")
+SPLITS = ("baseline", "overlap", *METHODS)
 
 
 def main() -> None:

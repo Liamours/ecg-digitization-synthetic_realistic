@@ -40,4 +40,6 @@ unet:
   weights: weights/unet_weights_07072025.pt
   max_side: 3000
   threshold: 0.235
+ecgtizer:   # lead separation methods of src.digitize.separate
+  repo: '@external/ecgtizer'
 log_dir: '@logs'

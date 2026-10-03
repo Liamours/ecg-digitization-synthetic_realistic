@@ -253,3 +253,20 @@ def test_page_record_takes_the_best_attempt_and_labels_every_lead():
     assert by["V1"]["status"] == "missing" and image == {"panels": 3, "panels_unreadable": 1, "leads_ok": 3, "leads_low_quality": 0, "leads_flat": 0, "leads_missing": 9, "complete": False, "repeated_leads": 3}
     flat_only = PanelRecord("panel0", "mac400", [0, 0, 1, 1], [0, 0], ["V4", "V5", "V6"], "ocr", 10.0, "ocr", grid, leads={"V4": mk("V4", "ok", np.zeros_like(t))})
     assert {x["lead"]: x for x in page_record([flat_only], cfg, 25.0)[2]}["V4"]["status"] == "flat"
+
+
+def test_lines_take_their_trace_runs_and_split_a_shared_one():
+    from src.digitize.separate import lines_to_masks
+
+    mask = np.zeros((100, 50), np.uint8)
+    mask[20, :] = 1          # lead 1, flat
+    mask[70, :] = 1          # lead 2, flat
+    mask[5:21, 10] = 1       # a peak of lead 1: a steep stroke in one column
+    mask[20:71, 30] = 1      # a stroke joining both leads in one column
+    lines = np.vstack([np.full(50, 20.0), np.full(50, 70.0)])
+    lines[0, 10] = 12.0      # the line passes the stroke at its middle
+    lines[1, 40] = np.nan    # no line here: that trace pixel is owned by nobody
+    one, two = lines_to_masks(lines, [(0, 50), (50, 100)], mask)
+    assert one[5:21, 10].all() and one[20, 0] == 1 and two[70, 0] == 1
+    assert one[20:45, 30].all() and two[45:71, 30].all() and not (one & two).any()
+    assert two[70, 40] == 0

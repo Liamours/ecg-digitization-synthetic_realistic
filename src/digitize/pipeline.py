@@ -62,6 +62,7 @@ class Digitizer:
         self.cfg, self.layout = cfg, layout
         self._unet = None
         self._tracenet = None
+        self._separator = None
 
     @property
     def unet(self) -> maskmod.UNetMask:
@@ -79,15 +80,33 @@ class Digitizer:
             self._tracenet = TraceMask({**net, "weights": paths.resolve(net["weights"])}, resolve_device(self.cfg["device"]))
         return self._tracenet
 
+    @property
+    def separator(self):
+        if self._separator is None:
+            from src.digitize.separate import Separator
+
+            self._separator = Separator(paths.resolve(self.cfg["unet"]["repo"]), paths.resolve(self.cfg["ecgtizer"]["repo"]))
+        return self._separator
+
     # ---- shared -------------------------------------------------------------------------------------------------
-    def digitize_region(self, mask: np.ndarray, grid: Grid, gain: float, labels: list[str], rows: int, rows_mode: str, tracking: str | None = None) -> tuple[dict[str, Lead], float]:
-        """Row assignment, sampling, and lead flags for one region's trace mask. `tracking` (baseline or overlap) overrides the layout's."""
+    def digitize_region(self, mask: np.ndarray, grid: Grid, gain: float, labels: list[str], rows: int, rows_mode: str, tracking: str | None = None,
+                        soft: np.ndarray | None = None) -> tuple[dict[str, Lead], float]:
+        """Row assignment, sampling, and lead flags for one region's trace mask. `tracking` overrides the layout's: baseline,
+        overlap, or an open-source method of src.digitize.separate; `soft` is the trace probability those may use."""
         bands = leadmod.split_rows(mask, rows, rows_mode)
-        track = leadmod.track_leads_overlap if (tracking or self.layout.get("tracking")) == "overlap" else leadmod.track_leads
-        lead_masks, crossing = track(mask, bands)
+        how = tracking or self.layout.get("tracking", "baseline")
+        if how in ("baseline", "overlap"):
+            lead_masks, crossing = (leadmod.track_leads_overlap if how == "overlap" else leadmod.track_leads)(mask, bands)
+        else:
+            lead_masks, crossing = self.separator.split(how, mask, mask.astype(np.float32) if soft is None else soft, bands), 0.0
         trim = self.cfg["trim"]
         lead_masks = leadmod.trim_early_starts(lead_masks, grid, trim["early_start_mm"], trim["margin_mm"], trim.get("late_end_mm"))
-        ys, xs = np.nonzero(np.any(lead_masks, axis=0))
+        whole = []  # the time extent every lead is measured against comes from the mask cut into its row bands, not from what a method assigned: a method that leaves part of a trace unassigned must lose coverage for it
+        for b0, b1 in bands:
+            whole.append(np.zeros_like(mask))
+            whole[-1][b0:b1] = mask[b0:b1]
+        whole = leadmod.trim_early_starts(whole, grid, trim["early_start_mm"], trim["margin_mm"], trim.get("late_end_mm"))
+        ys, xs = np.nonzero(np.any(whole, axis=0))
         x_all = grid.to_mm(np.column_stack([xs, ys]).astype(np.float64))[:, 0]
         x_range = (float(np.percentile(x_all, 0.2)), float(np.percentile(x_all, 99.8)))  # stray pixels at a region's edge must not stretch the time axis
         samp = {**self.cfg["sampling"]}
@@ -219,7 +238,7 @@ class Digitizer:
     def trace(self, front: PanelFront, prob: np.ndarray | None = None, mask_kind: str | None = None, tracking: str | None = None) -> PanelRecord:
         """Trace mask, lead separation and sampling for a panel whose front part is known.
 
-        `mask_kind` (openecg, trace_net) and `tracking` (baseline, overlap) override the layout, so several methods
+        `mask_kind` (openecg, trace_net) and `tracking` (baseline, overlap, or a method of src.digitize.separate) override the layout, so several methods
         can be run on the same saved fronts (src.digitize.methods)."""
         kind = mask_kind or self.layout["mask"]["kind"]
         lay, cfg = self.layout, self.cfg
@@ -233,7 +252,8 @@ class Digitizer:
             grid, zone, gain = front.grid, front.zone, front.gain
             rec.grid, rec.gain_mm_per_mv, rec.gain_source, rec.pulses_mm = grid, gain, front.gain_source, [p["height_mm"] for p in front.pulses]
             if kind == "trace_net":  # the trained network: text, names, the step and the icon are background by its labels
-                mask = self.tracenet.mask(crop, grid.px_per_mm[0])
+                p = self.tracenet.probability(crop, grid.px_per_mm[0])
+                mask = (p > self.tracenet.threshold).astype(np.uint8)
                 mask[:max(y0 - cy0, 0)] = 0
                 mask[y1 - cy0:] = 0
             elif kind in ("openecg", "unet"):  # the pretrained Open-ECG-Digitizer U-Net, on the crop or cut from a page-wide probability
@@ -246,7 +266,7 @@ class Digitizer:
             mask[:, :x0 - cx0] = 0
             mask[:, x1 - cx0:] = 0
             mask = cut_at_gap(mask, lay["cut_gap_px"])
-            rec.leads, _ = self.digitize_region(mask, grid, gain, front.labels, lay["rows"], lay["rows_mode"], tracking)
+            rec.leads, _ = self.digitize_region(mask, grid, gain, front.labels, lay["rows"], lay["rows_mode"], tracking, p * mask)
         except Exception as exc:
             rec.error = f"{type(exc).__name__}: {exc}"
         return self.finish(rec)

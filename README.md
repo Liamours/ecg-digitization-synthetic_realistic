@@ -35,7 +35,7 @@ uv run python -m src.digitize.metrics
 uv run --with pytest python -m pytest tests/test_digitize.py
 ```
 
-`front` writes per page `page.json`, `overview.jpg`, and per ECG panel `panel<i>.png` plus `panel<i>.front.json`. `methods` runs one trace mask (`openecg`, `trace_net`) and one lead separation (`baseline`, `overlap`) on a saved front stage and writes one folder per combination. `compare` writes `pairs.csv`, `leads.csv` and `agreement_map.png`: where the method runs agree per page and lead. `run` does the whole page in one go. All long runs write a log with an ETA and skip finished pages on a re-run.
+`front` writes per page `page.json`, `overview.jpg`, and per ECG panel `panel<i>.png` plus `panel<i>.front.json`. `methods` runs one trace mask (`openecg`, `trace_net`) and one lead separation (`baseline`, `overlap`, `openecg_lines`, `ecgtizer_full`, `ecgtizer_fragmented`, `ecgtizer_lazy`) on a saved front stage and writes one folder per combination. `compare` writes `pairs.csv`, `leads.csv` and `agreement_map.png`: where the method runs agree per page and lead. `run` does the whole page in one go. All long runs write a log with an ETA and skip finished pages on a re-run.
 
 The repo's own environment has CPU-only torch; the GPU runs use the project's `.venvs/digitize_gpu` (run from the repo root with `PYTHONPATH=.`).
 
@@ -57,7 +57,7 @@ The repo's own environment has CPU-only torch; the GPU runs use the project's `.
 | `ocr.py`, `text.py` | RapidOCR text boxes; gain, lead-name set, header and footer band |
 | `pulses.py` | calibration pulse height in mm |
 | `mask.py`, `tracenet.py` | trace pixels: the Open-ECG-Digitizer U-Net, or the repo's own small network |
-| `leads.py`, `sample.py` | row bands and lead tracking; mV over time in grid millimetres |
+| `leads.py`, `separate.py`, `sample.py` | row bands and lead tracking; lead separation by Open-ECG-Digitizer's signal extractor and ecgtizer's track extraction; mV over time in grid millimetres |
 | `selftest.py`, `checks.py` | pulse, Einthoven relations, coverage flags, confidence |
 | `score.py`, `oracle.py`, `metrics.py` | score against a synthetic set's exact labels, runs with true steps, tables in `results/metrics/` |
 | `warp.py`, `reverse.py` | measured warp of the dot lattice; results drawn back on the original image |
