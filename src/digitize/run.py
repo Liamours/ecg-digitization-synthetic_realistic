@@ -23,7 +23,7 @@ import yaml
 from tqdm import tqdm
 
 from src import paths
-from src.digitize import report, reverse
+from src.digitize import assemble, report, reverse
 from src.digitize.pipeline import Digitizer, fit_side, load_image, load_layout
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
@@ -87,6 +87,8 @@ def main() -> None:
                 records, up, k = digitizer.run_fixed_page(image), image, 0
             for r in records:
                 r.save(out)
+            t_rec, signal, lead_labels, image_labels = assemble.page_record(records, cfg["record"])
+            assemble.save(out, t_rec, signal, lead_labels, {"source": str(path), "rotation_ccw_deg": k, **image_labels})
             overlay = reverse.draw(up, records, cfg["sampling"])
             save_overlay(out / "overlay_upright.jpg", overlay, cfg["overlay_max_side"])
             if k:
