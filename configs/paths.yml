@@ -1,7 +1,9 @@
 roots:
   datasets: ../../datasets
   models: ../../models
-  inferences: ../../inferences
+  inferences: ../../results/inferences
+  analyses: ../../results/analyses
+  metrics: ../../results/metrics
   logs: ../../logs
   external: ../../external
 datasets:   # alias: folder name under datasets/. The alias is the folder name without its ecg-/ekg- prefix. After renaming a folder on disk, change the right-hand name here and nothing else in this repo

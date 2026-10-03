@@ -2,7 +2,7 @@
 
 Photographed paper ECG to digitized signal: page orientation, panel detection, template/type/gain reading, lead-row cutting, digitization.
 
-Code, configs, scripts, and tests only. Datasets, checkpoints, inference outputs, and logs live in the project root folders (`datasets/`, `models/`, `inferences/`, `logs/`), referenced through `configs/paths.yml` (roots and dataset aliases). Command line paths and config paths accept `@logs`, `@inferences/<run>`, `@mac400-scan/scan_29`; after renaming a dataset folder on disk, change its name in `configs/paths.yml` and nothing else here.
+Code, configs, scripts, and tests only. Datasets, checkpoints, inference outputs, and logs live in the project root folders (`datasets/`, `models/`, `results/inferences/`, `logs/`), referenced through `configs/paths.yml` (roots and dataset aliases). Command line paths and config paths accept `@logs`, `@inferences/<run>`, `@mac400-scan/scan_29`; after renaming a dataset folder on disk, change its name in `configs/paths.yml` and nothing else here.
 
 ## Current stage: page to panels
 
