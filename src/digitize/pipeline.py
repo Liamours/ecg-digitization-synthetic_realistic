@@ -172,7 +172,10 @@ class Digitizer:
             q["box"] = [round(v * scale) for v in q["box"]]
         ecg = [q for q in panels if q["kind"] == "ecg"]
         assumed = self.page_gain(texts, [[v / scale for v in q["box"]] for q in ecg])
-        return [self.front(up, q["box"], i, texts, scale, assumed) for i, q in enumerate(ecg)], up, k, panels
+        fronts = [self.front(up, q["box"], i, texts, scale, assumed) for i, q in enumerate(ecg)]
+        for f, (labels, source) in zip(fronts, text.fill_unread_sets([(f.labels, f.label_source) for f in fronts], lay["label_sets"])):
+            f.labels, f.label_source = labels, source  # panels whose names were not read take theirs from the page's reading order
+        return fronts, up, k, panels
 
     def run_panel_page(self, image: np.ndarray) -> tuple[list[PanelRecord], np.ndarray, int]:
         """Returns the records, the upright page they refer to, and the counterclockwise rotation that made it upright."""
@@ -191,6 +194,25 @@ class Digitizer:
                 read.append(g)
         return Counter(read).most_common(1)[0][0] if read else self.cfg["gain"]["assumed"]
 
+    def lead_names(self, texts: list[dict], page_names: list[dict], box: list[int], crop_origin: list[int], index: int) -> tuple[list[str], str]:
+        """The panel's lead-name set and where it came from: read on the crop (`ocr`), read on the page (`page_ocr`), or the
+        template order (`position`).
+
+        Only text in the left half of the panel's own box counts: the names are printed a fifth of the way in, and the crop's
+        margin reaches the names of the panel to its right, which once named a V1 to V3 panel V4 to V6."""
+        lay = self.layout
+        x0, y0, x1, y1 = box
+        cx0, cy0 = crop_origin
+        own = lambda t: x0 - cx0 <= (t["bbox"][0] + t["bbox"][2]) / 2 < (x0 + x1) / 2 - cx0 and y0 - cy0 <= (t["bbox"][1] + t["bbox"][3]) / 2 < y1 - cy0
+        mine = [t for t in texts if own(t)]
+        labels, source = text.read_labels(mine, lay["label_sets"], index)
+        if source == "position" and self.cfg.get("merge_page_text"):
+            # the crop read no usable lead name: ask the page read before falling back to the template order
+            labels2, source2 = text.read_labels(mine + [t for t in page_names if own(t)], lay["label_sets"], index)
+            if source2 == "ocr":
+                labels, source = labels2, "page_ocr"
+        return labels, source
+
     def front(self, up: np.ndarray, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None,
               force_gain: float | None = None, force_labels: list[str] | None = None, texts: list[dict] | None = None) -> PanelFront:
         """Everything about a panel short of its traces: the crop, its text, lead names, grid map and gain.
@@ -208,12 +230,7 @@ class Digitizer:
         label_re = re.compile(lay["labels"]["label_regex"])
         page_names = [{"text": t["text"], "bbox": [scale * t["bbox"][0] - cx0, scale * t["bbox"][1] - cy0, scale * t["bbox"][2] - cx0, scale * t["bbox"][3] - cy0]}
                       for t in (page_texts or []) if label_re.match(t["text"].strip()) and cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]
-        labels, label_source = text.read_labels(texts, lay["label_sets"], index)
-        if label_source == "position" and page_names and cfg.get("merge_page_text"):
-            # the crop read no usable lead name: ask the page read before falling back to the template order
-            labels2, source2 = text.read_labels(texts + page_names, lay["label_sets"], index)
-            if source2 == "ocr":
-                labels, label_source = labels2, "page_ocr"
+        labels, label_source = self.lead_names(texts, page_names, box, [cx0, cy0], index)
         if force_labels is not None:
             labels, label_source = list(force_labels), "oracle"
         front = PanelFront(index, lay["name"], box, [cx0, cy0], crop, texts, page_names, labels, label_source)

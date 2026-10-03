@@ -50,9 +50,38 @@ def main() -> None:
     ap.add_argument("--out-dir", type=paths.resolve, required=True)
     ap.add_argument("--list", type=paths.resolve, help="text file with one image path per line")
     ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @mac400-scan style aliases work, see configs/paths.yml")
+    ap.add_argument("--relabel", action="store_true", help="no OCR: apply the current lead-name rule to the text already saved in --out-dir and rewrite each panel's names")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     layout = load_layout(args.layout)
+    if args.relabel:
+        from src.digitize.text import fill_unread_sets
+
+        digitizer, changed, total = Digitizer(cfg, layout), 0, 0
+        sets = layout["label_sets"]
+        hits = {"template order": 0, "reading order": 0}
+        hidden = 0
+        for page in sorted(p.parent for p in args.out_dir.glob("*/page.json")):
+            files = sorted(page.glob("panel*.front.json"), key=lambda f: int(f.name[5:].split(".")[0]))
+            metas = [json.loads(f.read_text(encoding="utf-8")) for f in files]
+            read = [digitizer.lead_names(m["texts"], m["page_names"], m["box"], m["crop_origin"], m["index"]) for m in metas]
+            for f, m, (labels, source) in zip(files, metas, fill_unread_sets(read, sets)):
+                total += 1
+                if (labels, source) != (m["labels"], m["label_source"]):
+                    changed += 1
+                    print(f"{page.name} panel{m['index']}: {'-'.join(m['labels'])} ({m['label_source']}) -> {'-'.join(labels)} ({source})")
+                    m["labels"], m["label_source"] = labels, source
+                    f.write_text(json.dumps(m, indent=1), encoding="utf-8")
+            for i, (labels, source) in enumerate(read):  # how good is each fallback: hide a read name and predict it
+                if source == "position":
+                    continue
+                hidden += 1
+                masked = [(sets[j % len(sets)], "position") if j == i else r for j, r in enumerate(read)]
+                hits["template order"] += sets[i % len(sets)] == labels
+                hits["reading order"] += fill_unread_sets(masked, sets)[i][0] == labels
+        print(f"{changed} of {total} panels renamed")
+        print(f"fallback check on {hidden} panels whose names were read, each hidden in turn: " + ", ".join(f"{k} right on {v} ({100 * v / max(hidden, 1):.0f}%)" for k, v in hits.items()))
+        return
     log_dir = paths.resolve(cfg["log_dir"])
     log_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=log_dir / f"front-{args.out_dir.name}-{datetime.now():%Y%m%d}.log", level=logging.INFO, format="%(asctime)s %(message)s", encoding="utf-8")

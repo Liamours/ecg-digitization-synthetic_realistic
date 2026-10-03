@@ -270,3 +270,16 @@ def test_lines_take_their_trace_runs_and_split_a_shared_one():
     assert one[5:21, 10].all() and one[20, 0] == 1 and two[70, 0] == 1
     assert one[20:45, 30].all() and two[45:71, 30].all() and not (one & two).any()
     assert two[70, 40] == 0
+
+
+def test_unread_panel_names_follow_the_reading_order():
+    from src.digitize.text import fill_unread_sets
+
+    sets = [["I", "II", "III"], ["aVR", "aVL", "aVF"], ["V1", "V2", "V3"], ["V4", "V5", "V6"]]
+    r = lambda i: (sets[i], "ocr")
+    u = lambda i: (sets[i], "position")  # not read: the template order's guess
+    idx = lambda named: [sets.index(x[0]) for x in fill_unread_sets(named, sets)]
+    assert idx([r(0), r(1), u(2), r(3)]) == [0, 1, 2, 3]            # the set nobody has
+    assert idx([r(0), r(1), r(2), r(3), u(0), r(3)]) == [0, 1, 2, 3, 3, 3]  # between two last sets
+    assert idx([r(0), u(1), r(1), r(2), r(3), r(3)]) == [0, 0, 1, 2, 3, 3]  # the device repeats the first set
+    assert fill_unread_sets([r(0), u(1)], sets)[1] == (sets[1], "order") and fill_unread_sets([r(0)], sets) == [r(0)]
