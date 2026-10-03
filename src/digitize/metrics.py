@@ -38,6 +38,8 @@ def main() -> None:
     for f in sorted(inf.rglob("progress.csv")):
         with f.open(encoding="utf-8") as fh:
             rows = list(csv.DictReader(fh))
+        if not rows or "panels" not in rows[0]:  # the front stage keeps its own columns and reads no leads
+            continue
         status = Counter()
         complete = 0
         for rj in f.parent.glob("*/record.json"):
