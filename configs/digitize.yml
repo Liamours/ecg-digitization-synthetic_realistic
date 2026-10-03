@@ -35,11 +35,8 @@ gain:
 trace_net:   # src.digitize.tracenet, trained by src.train_trace_net; used by layouts with mask kind trace_net
   weights: '@models/trace_net/20261003-1/best.pt'
   threshold: 0.5
-unet:
-  repo: '@external/Open-ECG-Digitizer'
-  weights: weights/unet_weights_07072025.pt
+unet:   # Open-ECG-Digitizer's pretrained trace network (code in third_party/open_ecg_digitizer, weights fetched by scripts/get_weights.sh)
+  weights: '@models/open_ecg_digitizer-pretrained/unet_weights_07072025.pt'
   max_side: 3000
   threshold: 0.235
-ecgtizer:   # lead separation methods of src.digitize.separate
-  repo: '@external/ecgtizer'
 log_dir: '@logs'

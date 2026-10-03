@@ -28,6 +28,7 @@ from src import paths  # noqa: E402
 
 MAX_SHIFT = 50   # samples of the record's time base: methods may start a lead at a slightly different column
 MIN_OVERLAP = 250
+LIMB = ("I", "II", "III", "aVR", "aVL", "aVF")  # electrodes on arms and legs; the rest (V1 to V6) are the chest leads
 
 
 def read_record(page_dir: Path) -> tuple[list[str], np.ndarray, dict[str, str]]:
@@ -89,10 +90,15 @@ def main() -> None:
     fig.colorbar(im, ax=ax, fraction=0.03)
     fig.tight_layout()
     fig.savefig(args.methods / "agreement_map.png", dpi=130)
-    print("| Method | Leads ok | Leads low quality | Leads flat | Leads missing |\n|---|---|---|---|---|")
+    print("| Method | Leads ok | Leads low quality | Leads flat | Leads missing | Limb leads ok | Chest leads ok | Pages with all leads ok |\n|---|---|---|---|---|---|---|---|")
     for r in runs:
-        st = [x[r.name] for x in lead_rows if r.name in x]
-        print(f"| {r.name} | {st.count('ok')} | {st.count('low_quality')} | {st.count('flat')} | {st.count('missing')} |")
+        mine = [x for x in lead_rows if r.name in x]
+        st = [x[r.name] for x in mine]
+        limb = sum(x[r.name] == "ok" for x in mine if x["lead"] in LIMB)
+        full = sum(all(x[r.name] == "ok" for x in mine if x["page"] == p) for p in pages)
+        print(f"| {r.name} | {st.count('ok')} | {st.count('low_quality')} | {st.count('flat')} | {st.count('missing')} | {limb} | {st.count('ok') - limb} | {full} |")
+    ok_any = sum(any(x.get(r.name) == "ok" for r in runs) for x in lead_rows)
+    print(f"\nA lead is ok in at least one run on {ok_any} of {len(lead_rows)} lead slots")
     print("\n| Pair | Leads compared | Median correlation | Share with correlation at least 0.9 |\n|---|---|---|---|")
     for a, b in combinations([r.name for r in runs], 2):
         c = np.array([x["corr"] for x in pair_rows if x["method_a"] == a and x["method_b"] == b and x["corr"] != ""])
@@ -100,6 +106,10 @@ def main() -> None:
             print(f"| {a} vs {b} | {len(c)} | {np.median(c):.2f} | {100 * (c >= 0.9).mean():.0f}% |")
     m = np.array([x["mean_corr"] for x in lead_rows if x["mean_corr"] != ""])
     print(f"\n{len(m)} leads read by at least two methods; mean pairwise correlation at least 0.9 on {100 * (m >= 0.9).mean():.0f}%, below 0.5 on {100 * (m < 0.5).mean():.0f}%")
+    for name, pick in (("limb", lambda x: x["lead"] in LIMB), ("chest", lambda x: x["lead"] not in LIMB)):
+        g = np.array([x["mean_corr"] for x in lead_rows if x["mean_corr"] != "" and pick(x)])
+        if len(g):
+            print(f"{name} leads: {len(g)}, median {np.median(g):.2f}, below 0.5 on {100 * (g < 0.5).mean():.0f}%")
 
 
 if __name__ == "__main__":

@@ -4,19 +4,16 @@ Each method returns lines (one row position per image column, NaN where the lead
 each of the panel's row bands its longest line, so the result goes through the same trimming and sampling as the other
 lead-separation methods (src.digitize.leads).
 
-`openecg_lines`: Open-ECG-Digitizer's SignalExtractor (external/Open-ECG-Digitizer/src/model/signal_extractor.py) on
-the trace probability: connected regions become lines, a region holding more than one trace is split by tracing a
-horizontal path through it, and line pieces are matched end to start and merged.
+`openecg_lines`: Open-ECG-Digitizer's SignalExtractor (third_party/open_ecg_digitizer/signal_extractor.py) on the trace
+probability: connected regions become lines, a region holding more than one trace is split by tracing a horizontal path
+through it, and line pieces are matched end to start and merged.
 
 `ecgtizer_lazy`, `ecgtizer_full`, `ecgtizer_fragmented`: ecgtizer's track cutting (rows cut midway between the peaks of
-the row variance, external/ecgtizer/ecgtizer/PDF2XML.py) and one of its three per-column extractions.
-"""
-import importlib
-import importlib.util
-import sys
-import types
-from pathlib import Path
+the row variance, third_party/ecgtizer/PDF2XML.py) and one of its three per-column extractions
+(third_party/ecgtizer/extraction_functions.py). `ecgtizer_fragmented` is the canonical pipeline's lead separation.
 
+The third-party files are unmodified copies; sources, commits and licenses are in third_party/README.md.
+"""
 import numpy as np
 
 METHODS = ("openecg_lines", "ecgtizer_lazy", "ecgtizer_full", "ecgtizer_fragmented")
@@ -53,28 +50,22 @@ def lines_to_masks(lines: np.ndarray, bands: list[tuple[int, int]], mask: np.nda
 
 
 class Separator:
-    def __init__(self, openecg_repo: Path, ecgtizer_repo: Path):
-        self.openecg_repo, self.ecgtizer_repo = Path(openecg_repo), Path(ecgtizer_repo)
+    def __init__(self):
         self._extractor = None
-        self._ecgtizer = None
 
     @property
     def extractor(self):
         if self._extractor is None:
-            spec = importlib.util.spec_from_file_location("openecg_signal_extractor", self.openecg_repo / "src" / "model" / "signal_extractor.py")  # by path: the repo's own package is also named src
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            self._extractor = module.SignalExtractor()
+            from third_party.open_ecg_digitizer.signal_extractor import SignalExtractor
+
+            self._extractor = SignalExtractor()
         return self._extractor
 
     @property
     def ecgtizer(self):
-        if self._ecgtizer is None:
-            pkg = types.ModuleType("ecgtizer_src")  # the package's own __init__ pulls in its PDF and XML tooling; only the image functions are needed
-            pkg.__path__ = [str(self.ecgtizer_repo / "ecgtizer")]
-            sys.modules["ecgtizer_src"] = pkg
-            self._ecgtizer = importlib.import_module("ecgtizer_src.PDF2XML")
-        return self._ecgtizer
+        from third_party.ecgtizer import PDF2XML  # imported on first use: it needs pdf2image and matplotlib
+
+        return PDF2XML
 
     def split(self, method: str, mask: np.ndarray, soft: np.ndarray, bands: list[tuple[int, int]]) -> list[np.ndarray]:
         lines = self.openecg_lines(soft) if method == "openecg_lines" else self.ecgtizer_lines(mask, method.split("_", 1)[1])

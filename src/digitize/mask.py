@@ -27,22 +27,18 @@ def local_contrast_mask(gray: np.ndarray, cfg: dict) -> np.ndarray:
 
 
 class UNetMask:
-    """The Open-ECG-Digitizer segmentation network (external/Open-ECG-Digitizer); its trace class as a probability image."""
+    """The Open-ECG-Digitizer segmentation network (third_party/open_ecg_digitizer/unet.py, its published weights); its
+    trace class as a probability image."""
 
     SIGNAL_CLASS = 2
 
     def __init__(self, cfg: dict):
-        import importlib.util
-
         import torch
 
-        repo = Path(cfg["repo"]).resolve()
-        spec = importlib.util.spec_from_file_location("openecg_unet", repo / "src" / "model" / "unet.py")  # by path: the repo's own package is also named src
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        UNet = module.UNet
+        from third_party.open_ecg_digitizer.unet import UNet
+
         m = UNet(num_in_channels=3, num_out_channels=4, dims=[32, 64, 128, 256, 320, 320, 320, 320], depth=2)
-        ck = torch.load(repo / cfg["weights"], weights_only=True, map_location="cpu")
+        ck = torch.load(Path(cfg["weights"]), weights_only=True, map_location="cpu")
         ck = ck[0] if isinstance(ck, tuple) else ck
         m.load_state_dict({k.replace("_orig_mod.", ""): v for k, v in ck.items()})
         from src.digitize.ocr import resolve_device

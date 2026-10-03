@@ -67,7 +67,7 @@ class Digitizer:
     @property
     def unet(self) -> maskmod.UNetMask:
         if self._unet is None:
-            self._unet = maskmod.UNetMask({**self.cfg["unet"], "repo": paths.resolve(self.cfg["unet"]["repo"]), "device": self.cfg["device"]})
+            self._unet = maskmod.UNetMask({**self.cfg["unet"], "weights": paths.resolve(self.cfg["unet"]["weights"]), "device": self.cfg["device"]})
         return self._unet
 
     @property
@@ -85,7 +85,7 @@ class Digitizer:
         if self._separator is None:
             from src.digitize.separate import Separator
 
-            self._separator = Separator(paths.resolve(self.cfg["unet"]["repo"]), paths.resolve(self.cfg["ecgtizer"]["repo"]))
+            self._separator = Separator()
         return self._separator
 
     # ---- shared -------------------------------------------------------------------------------------------------
