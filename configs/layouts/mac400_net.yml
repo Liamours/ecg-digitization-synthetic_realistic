@@ -1,0 +1,31 @@
+name: mac400_net
+mode: panel
+panel_finding: configs/pages.yml
+label_sets: [[I, II, III], [aVR, aVL, aVF], [V1, V2, V3], [V4, V5, V6]]
+rows: 3
+rows_mode: equal
+tracking: baseline   # or overlap
+cut_gap_px: 45
+grid:
+  kind: dot
+  pitch_px_range: [9.0, 15.0]
+  angle_range_deg: 6.0
+  blackhat_kernel: 9
+  blackhat_contrast: 28
+  dot_area: [4, 45]
+  dot_max_side: 9
+zone:
+  header_regex: 'MAC|1\.02|^GE'
+  footer_regex: '^Man|25mm|mm/m|ADS|MDC|For|INNOQ'
+  margin_px: 6
+labels:
+  label_regex: '^(I{1,3}|aV[RLFUlf]|a[UV][RLF]|[UV][1-6])$'
+  fallback_columns: [255, 345]
+pulses:
+  gray_max: 130
+  height_tolerance: [0.85, 1.15]
+  width_mm: [4.0, 9.0]
+  min_area: 80
+  solid_fill_max: 0.5
+mask:
+  kind: trace_net

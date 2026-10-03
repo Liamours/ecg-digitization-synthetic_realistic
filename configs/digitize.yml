@@ -32,6 +32,9 @@ gain:
   allowed: [5.0, 10.0]
   assumed: 10.0   # used when a panel prints no gain and the page read none: the clinical default
   tolerance: 0.2
+trace_net:   # src.digitize.tracenet, trained by src.train_trace_net; used by layouts with mask kind trace_net
+  weights: '@models/trace_net/20261003-1/best.pt'
+  threshold: 0.5
 unet:
   repo: '@external/Open-ECG-Digitizer'
   weights: weights/unet_weights_07072025.pt

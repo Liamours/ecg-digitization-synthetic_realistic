@@ -118,6 +118,7 @@ def test_entry_points_import():
     """The command line modules are not otherwise imported by the tests, so a syntax slip in one would go unseen."""
     import src.digitize.assemble  # noqa: F401
     import src.digitize.checks  # noqa: F401
+    import src.digitize.front  # noqa: F401
     import src.digitize.metrics  # noqa: F401
     import src.digitize.oracle  # noqa: F401
     import src.digitize.pipeline  # noqa: F401

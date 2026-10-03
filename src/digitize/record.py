@@ -53,6 +53,49 @@ class Lead:
 
 
 @dataclass
+class PanelFront:
+    """A panel before its traces are read: the crop and what the page says about it. Saved as panel<i>.png and panel<i>.front.json,
+    so every trace method can start from the same input without running OCR and the grid fit again."""
+    index: int
+    layout: str
+    box: list[int]                 # panel rectangle in upright page pixels
+    crop_origin: list[int]         # page pixels of the crop's top left corner (the box plus a margin)
+    crop: np.ndarray               # BGR
+    texts: list[dict]              # OCR of the crop, crop pixels
+    page_names: list[dict]         # lead-name boxes the page read found inside the crop, crop pixels
+    labels: list[str]
+    label_source: str
+    grid: Grid | None = None
+    zone: tuple[int, int] | None = None   # rows between the header and footer text, crop pixels
+    gain: float | None = None
+    gain_source: str = ""
+    pulses: list[dict] = field(default_factory=list)   # calibration pulses found: bbox in crop pixels, height in mm
+    error: str = ""
+
+    def save(self, out_dir: Path) -> None:
+        import cv2
+
+        cv2.imwrite(str(out_dir / f"panel{self.index}.png"), self.crop)
+        g = self.grid
+        meta = {"index": self.index, "layout": self.layout, "box": self.box, "crop_origin": self.crop_origin, "labels": self.labels, "label_source": self.label_source,
+                "gain_mm_per_mV": self.gain, "gain_source": self.gain_source, "zone": list(self.zone) if self.zone else None, "pulses": self.pulses, "error": self.error,
+                "grid": None if g is None else {"kind": g.kind, "origin": g.origin.tolist(), "a1": g.a1.tolist(), "a2": g.a2.tolist(), "rms_px": g.rms_px, "n_inliers": g.n_inliers,
+                                                 "tilt_deg": g.tilt_deg, "px_per_mm": g.px_per_mm},
+                "texts": self.texts, "page_names": self.page_names}
+        (out_dir / f"panel{self.index}.front.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+
+    @classmethod
+    def load(cls, json_path: Path) -> "PanelFront":
+        import cv2
+
+        m = json.loads(json_path.read_text(encoding="utf-8"))
+        g = m["grid"]
+        grid = None if g is None else Grid(g["kind"], np.array(g["origin"]), np.array(g["a1"]), np.array(g["a2"]), g["rms_px"], g["n_inliers"])
+        return cls(m["index"], m["layout"], m["box"], m["crop_origin"], cv2.imread(str(json_path.with_name(f"panel{m['index']}.png"))), m["texts"], m["page_names"], m["labels"], m["label_source"],
+                   grid, tuple(m["zone"]) if m["zone"] else None, m["gain_mm_per_mV"], m["gain_source"], m["pulses"], m["error"])
+
+
+@dataclass
 class PanelRecord:
     panel_id: str
     layout: str

@@ -1,0 +1,25 @@
+train_dataset: '@synthetic-260930-1856'   # panels and exact trace masks
+val_dataset: '@synthetic-260930-2311'     # a different seed, never trained on
+image_columns: [panel_image_path, panel_image_noised_rectified_path]   # the clean print and the same panel cut back out of its degraded page
+out_dir: '@models/trace_net'
+log_dir: '@logs'
+seed: 42
+model:
+  base: 24
+  depth: 4
+train_px_per_mm: 7.874     # the generator's scale: 39.37 px per 5 mm box
+crop: [384, 640]           # height, width of a training crop; a panel is 648 x 787
+batch: 8
+workers: 2                 # this laptop crashed a run with 8 (wiki/overview/hardware.md)
+epochs: 40
+lr: 0.001                  # Adam with cosine decay; a starting point, judged by the validation Dice below
+mask_dilate_px: 0          # the label already covers the full stroke (checked on the panel overlays)
+augment:                   # what real scans show and the generator does not: faint thin grey traces, strong red grids, scale and tone differences
+  scale: [0.8, 1.25]
+  fade: [0.25, 1.0]        # trace ink blended toward the paper: 1.0 keeps it, 0.25 leaves a faint grey line
+  fade_prob: 0.5
+  gain: [0.88, 1.05]       # per channel, a mild cream or pink tint of paper and grid
+  gamma: [0.7, 1.5]
+  blur_sigma: [0.0, 1.2]
+  noise_std: [0.0, 0.03]
+  gray_prob: 0.2

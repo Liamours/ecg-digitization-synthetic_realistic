@@ -18,7 +18,7 @@ from src.digitize import leads as leadmod
 from src.digitize import mask as maskmod
 from src.digitize import ocr, pulses, selftest, text
 from src.digitize.gridmap import fit_grid
-from src.digitize.record import Grid, Lead, PanelRecord
+from src.digitize.record import Grid, Lead, PanelFront, PanelRecord
 from src.orient import choose_rotation
 from src.panels import find_panels, iou
 
@@ -61,12 +61,23 @@ class Digitizer:
     def __init__(self, cfg: dict, layout: dict):
         self.cfg, self.layout = cfg, layout
         self._unet = None
+        self._tracenet = None
 
     @property
     def unet(self) -> maskmod.UNetMask:
         if self._unet is None:
             self._unet = maskmod.UNetMask({**self.cfg["unet"], "repo": paths.resolve(self.cfg["unet"]["repo"]), "device": self.cfg["device"]})
         return self._unet
+
+    @property
+    def tracenet(self):
+        if self._tracenet is None:
+            from src.digitize.ocr import resolve_device
+            from src.digitize.tracenet import TraceMask
+
+            net = self.cfg["trace_net"]
+            self._tracenet = TraceMask({**net, "weights": paths.resolve(net["weights"])}, resolve_device(self.cfg["device"]))
+        return self._tracenet
 
     # ---- shared -------------------------------------------------------------------------------------------------
     def digitize_region(self, mask: np.ndarray, grid: Grid, gain: float, labels: list[str], rows: int, rows_mode: str) -> tuple[dict[str, Lead], float]:
@@ -125,8 +136,9 @@ class Digitizer:
         return k, again, turned
 
     # ---- panel mode ---------------------------------------------------------------------------------------------
-    def run_panel_page(self, image: np.ndarray) -> tuple[list[PanelRecord], np.ndarray, int]:
-        """Returns the records, the upright page they refer to, and the counterclockwise rotation that made it upright."""
+    def front_page(self, image: np.ndarray) -> tuple[list[PanelFront], np.ndarray, int, list[dict]]:
+        """The front part of every ECG panel on a page, the upright page, the counterclockwise rotation that made it upright,
+        and every panel the finder saw (ECG, report, other) with its box in upright page pixels."""
         lay, cfg = self.layout, self.cfg
         finding = yaml.safe_load((ROOT / lay["panel_finding"]).read_text(encoding="utf-8"))
         h0, w0 = image.shape[:2]
@@ -134,17 +146,20 @@ class Digitizer:
         small = cv2.resize(image, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else image
         k, texts, small = self.orient_and_read(small, finding)
         up = np.rot90(image, k // 90).copy()
-        rotated = [(t["text"], t["bbox"]) for t in texts]
         uh, uw = small.shape[:2]
-        panels = find_panels(rotated, uw, uh, finding)
+        panels = find_panels([(t["text"], t["bbox"]) for t in texts], uw, uh, finding)
         scale = up.shape[1] / uw
-        prob = self.unet.probability(up) if lay["mask"]["kind"] == "unet" else None
-        records = []
+        for q in panels:
+            q["box"] = [round(v * scale) for v in q["box"]]
         ecg = [q for q in panels if q["kind"] == "ecg"]
-        assumed = self.page_gain(texts, [q["box"] for q in ecg])
-        for i, p in enumerate(ecg):
-            records.append(self.panel(up, prob, [round(v * scale) for v in p["box"]], i, texts, scale, assumed))
-        return records, up, k
+        assumed = self.page_gain(texts, [[v / scale for v in q["box"]] for q in ecg])
+        return [self.front(up, q["box"], i, texts, scale, assumed) for i, q in enumerate(ecg)], up, k, panels
+
+    def run_panel_page(self, image: np.ndarray) -> tuple[list[PanelRecord], np.ndarray, int]:
+        """Returns the records, the upright page they refer to, and the counterclockwise rotation that made it upright."""
+        fronts, up, k, _ = self.front_page(image)
+        prob = self.unet.probability(up) if self.layout["mask"]["kind"] == "unet" else None
+        return [self.trace(f, prob) for f in fronts], up, k
 
     def page_gain(self, texts: list[dict], boxes: list[list[float]]) -> float:
         """The gain most panels of this page print (boxes and texts in the same frame), else the configured default."""
@@ -157,29 +172,32 @@ class Digitizer:
                 read.append(g)
         return Counter(read).most_common(1)[0][0] if read else self.cfg["gain"]["assumed"]
 
-    def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None,
-              force_gain: float | None = None, force_labels: list[str] | None = None, texts: list[dict] | None = None) -> PanelRecord:
-        """force_gain and force_labels replace what the page would say; they exist for the oracle runs (src.digitize.oracle)."""
+    def front(self, up: np.ndarray, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None,
+              force_gain: float | None = None, force_labels: list[str] | None = None, texts: list[dict] | None = None) -> PanelFront:
+        """Everything about a panel short of its traces: the crop, its text, lead names, grid map and gain.
+
+        force_gain and force_labels replace what the page would say (the oracle runs, src.digitize.oracle); `texts` is the
+        crop's OCR when a caller already has it."""
         lay, cfg = self.layout, self.cfg
         mx, my = cfg["panel_margin_px"]
         x0, y0, x1, y1 = box
         cx0, cy0, cx1, cy1 = max(x0 - mx, 0), max(y0 - my, 0), min(x1 + mx, up.shape[1]), min(y1 + my, up.shape[0])
         crop = up[cy0:cy1, cx0:cx1]
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        if texts is None:  # a caller that read this crop before passes the result
+        if texts is None:
             texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
+        label_re = re.compile(lay["labels"]["label_regex"])
+        page_names = [{"text": t["text"], "bbox": [scale * t["bbox"][0] - cx0, scale * t["bbox"][1] - cy0, scale * t["bbox"][2] - cx0, scale * t["bbox"][3] - cy0]}
+                      for t in (page_texts or []) if label_re.match(t["text"].strip()) and cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]
         labels, label_source = text.read_labels(texts, lay["label_sets"], index)
-        if label_source == "position" and page_texts is not None and cfg.get("merge_page_text"):
+        if label_source == "position" and page_names and cfg.get("merge_page_text"):
             # the crop read no usable lead name: ask the page read before falling back to the template order
-            label_re = re.compile(lay["labels"]["label_regex"])
-            extra = [{"text": t["text"], "bbox": [0, 0, 1, 1]} for t in page_texts if label_re.match(t["text"].strip()) and cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]
-            labels2, source2 = text.read_labels(texts + extra, lay["label_sets"], index)
+            labels2, source2 = text.read_labels(texts + page_names, lay["label_sets"], index)
             if source2 == "ocr":
                 labels, label_source = labels2, "page_ocr"
         if force_labels is not None:
             labels, label_source = list(force_labels), "oracle"
-        rec = PanelRecord(f"panel{index}", lay["name"], box, [cx0, cy0], labels, label_source, None, "", Grid("dot", np.zeros(2), np.zeros(2), np.zeros(2)),
-                          text_boxes=[{"text": t["text"], "bbox": [t["bbox"][0] + cx0, t["bbox"][1] + cy0, t["bbox"][2] + cx0, t["bbox"][3] + cy0]} for t in texts])
+        front = PanelFront(index, lay["name"], box, [cx0, cy0], crop, texts, page_names, labels, label_source)
         try:
             grid = fit_grid(gray, lay["grid"])
             zone = text.trace_zone(texts, gray.shape[0], lay["zone"])
@@ -192,27 +210,50 @@ class Digitizer:
                 gain, source = assumed_gain, "assumed"
             if gain is None:
                 raise ValueError("gain not read and no calibration pulse found")
-            found = pulses.find_pulses(gray, grid, gain, window, lay["pulses"])
-            rec.grid, rec.gain_mm_per_mv, rec.gain_source, rec.pulses_mm = grid, gain, source, [p["height_mm"] for p in found]
-            if prob is not None:
+            front.grid, front.zone, front.gain, front.gain_source = grid, zone, gain, source
+            front.pulses = pulses.find_pulses(gray, grid, gain, window, lay["pulses"])
+        except Exception as exc:  # a panel that cannot be read keeps its record and its error
+            front.error = f"{type(exc).__name__}: {exc}"
+        return front
+
+    def trace(self, front: PanelFront, prob: np.ndarray | None = None) -> PanelRecord:
+        """Trace mask, lead separation and sampling for a panel whose front part is known."""
+        lay, cfg = self.layout, self.cfg
+        (x0, y0, x1, y1), (cx0, cy0), crop, texts = front.box, front.crop_origin, front.crop, front.texts
+        cy1, cx1 = cy0 + crop.shape[0], cx0 + crop.shape[1]
+        rec = PanelRecord(f"panel{front.index}", lay["name"], front.box, front.crop_origin, front.labels, front.label_source, None, "", Grid("dot", np.zeros(2), np.zeros(2), np.zeros(2)),
+                          text_boxes=[{"text": t["text"], "bbox": [t["bbox"][0] + cx0, t["bbox"][1] + cy0, t["bbox"][2] + cx0, t["bbox"][3] + cy0]} for t in texts], error=front.error)
+        if front.error:
+            return self.finish(rec)
+        try:
+            grid, zone, gain = front.grid, front.zone, front.gain
+            rec.grid, rec.gain_mm_per_mv, rec.gain_source, rec.pulses_mm = grid, gain, front.gain_source, [p["height_mm"] for p in front.pulses]
+            if lay["mask"]["kind"] == "trace_net":  # the trained network: text, names, the step and the icon are background by its labels
+                mask = self.tracenet.mask(crop, grid.px_per_mm[0])
+                mask[:max(y0 - cy0, 0)] = 0
+                mask[y1 - cy0:] = 0
+            elif prob is not None:
                 mask = (prob[cy0:cy1, cx0:cx1] > cfg["unet"]["threshold"]).astype(np.uint8)
                 mask[:zone[0]] = 0
                 mask[zone[1]:] = 0
             else:
+                gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
                 label_re = re.compile(lay["labels"]["label_regex"])
-                from_page = [{"text": t["text"], "bbox": [scale * t["bbox"][0] - cx0, scale * t["bbox"][1] - cy0, scale * t["bbox"][2] - cx0, scale * t["bbox"][3] - cy0]}
-                             for t in (page_texts or []) if label_re.match(t["text"].strip()) and cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]
-                names = [t for t in texts + from_page if label_re.match(t["text"].strip())]  # the crop read and the page read, in crop pixels
+                names = [t for t in texts + front.page_names if label_re.match(t["text"].strip())]  # the crop read and the page read, in crop pixels
                 lab_cols = text.label_columns(texts, tuple(lay["labels"]["fallback_columns"]), lay["labels"])
                 printed = [t["bbox"] for t in texts if not label_re.match(t["text"].strip()) and len(re.sub(r"\W", "", t["text"])) >= 2]
-                mask = maskmod.threshold_mask(gray, zone, lab_cols, [p["bbox"] for p in found], lay["mask"], printed, grid.px_per_mm[0], [t["bbox"] for t in names])
+                mask = maskmod.threshold_mask(gray, zone, lab_cols, [p["bbox"] for p in front.pulses], lay["mask"], printed, grid.px_per_mm[0], [t["bbox"] for t in names])
             mask[:, :x0 - cx0] = 0
             mask[:, x1 - cx0:] = 0
             mask = cut_at_gap(mask, lay["cut_gap_px"])
-            rec.leads, _ = self.digitize_region(mask, grid, gain, labels, lay["rows"], lay["rows_mode"])
-        except Exception as exc:  # a panel that cannot be read keeps its record and its error
+            rec.leads, _ = self.digitize_region(mask, grid, gain, front.labels, lay["rows"], lay["rows_mode"])
+        except Exception as exc:
             rec.error = f"{type(exc).__name__}: {exc}"
         return self.finish(rec)
+
+    def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None,
+              force_gain: float | None = None, force_labels: list[str] | None = None, texts: list[dict] | None = None) -> PanelRecord:
+        return self.trace(self.front(up, box, index, page_texts, scale, assumed_gain, force_gain, force_labels, texts), prob)
 
     # ---- page mode ----------------------------------------------------------------------------------------------
     def run_fixed_page(self, image: np.ndarray) -> list[PanelRecord]:

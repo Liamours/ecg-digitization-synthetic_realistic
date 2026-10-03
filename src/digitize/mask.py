@@ -25,15 +25,16 @@ def drop_printed_text(m: np.ndarray, boxes: list[list[float]], max_px: float, pa
     form components as wide as a word, so the size of the component is not limited; a component stays when less than 60
     percent of its box lies inside a text box (the trace itself, or a fragment that only passes near a text box)."""
     n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
-    boxes = [b for b in boxes if b[3] - b[1] <= max_px]
-    for i in range(1, n):
-        x, y, w, h, _a = st[i]
-        for b in boxes:
-            iw = min(x + w, b[2] + pad_px) - max(x, b[0] - pad_px)
-            ih = min(y + h, b[3] + pad_px) - max(y, b[1] - pad_px)
-            if iw > 0 and ih > 0 and iw * ih >= 0.6 * w * h:
-                m[lab == i] = 0
-                break
+    x, y, w, h = (st[:, i].astype(np.float64) for i in range(4))
+    kill = np.zeros(n, bool)
+    for b in boxes:
+        if b[3] - b[1] > max_px:
+            continue
+        iw = np.minimum(x + w, b[2] + pad_px) - np.maximum(x, b[0] - pad_px)
+        ih = np.minimum(y + h, b[3] + pad_px) - np.maximum(y, b[1] - pad_px)
+        kill |= (iw > 0) & (ih > 0) & (iw * ih >= 0.6 * w * h)
+    kill[0] = False  # label 0 is the background
+    m[kill[lab]] = 0
     return m
 
 
@@ -42,10 +43,10 @@ def drop_solid_blobs(m: np.ndarray, min_px: float, fill: float, max_px: float = 
 
     A component longer than `max_px` is a shadow or dark paper, not an icon, and stays for the threshold to deal with."""
     n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
-    for i in range(1, n):
-        x, y, w, h, a = st[i]
-        if min(w, h) >= min_px and max(w, h) <= max_px and a >= fill * w * h:
-            m[lab == i] = 0
+    w, h, a = st[:, 2], st[:, 3], st[:, 4]
+    kill = (np.minimum(w, h) >= min_px) & (np.maximum(w, h) <= max_px) & (a >= fill * w * h)
+    kill[0] = False
+    m[kill[lab]] = 0
     return m
 
 
@@ -65,10 +66,10 @@ def threshold_mask(gray: np.ndarray, zone: tuple[int, int], label_cols: tuple[in
     for x, y, w, h in pulse_boxes:
         m[max(y - 4, 0):y + h + 4, max(x - 4, 0):x + w + 4] = 0
     n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
-    for i in range(1, n):
-        x, y, w, h, area = st[i]
-        if area < cfg["label_max_area"] and label_cols[0] <= x + w / 2 <= label_cols[1] and w < cfg["label_max_width"]:
-            m[lab == i] = 0
+    centre = st[:, 0] + st[:, 2] / 2
+    kill = (st[:, 4] < cfg["label_max_area"]) & (label_cols[0] <= centre) & (centre <= label_cols[1]) & (st[:, 2] < cfg["label_max_width"])
+    kill[0] = False
+    m[kill[lab]] = 0
     dist = cv2.distanceTransform(m, cv2.DIST_L2, 3)  # a label touching the trace stays connected: remove pixels near thick strokes
     core = (dist >= cfg["glyph_core"]).astype(np.uint8)
     core[:, :label_cols[0]] = 0
