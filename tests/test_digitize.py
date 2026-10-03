@@ -185,21 +185,6 @@ def test_checks_script_scores_pulse_and_einthoven(tmp_path):
     assert score_panel({}, tmp_path / "missing.csv", cfg)["einthoven_ok"] is None
 
 
-def test_printed_text_and_solid_blobs_leave_the_trace_alone():
-    from src.digitize.mask import drop_printed_text, drop_solid_blobs
-
-    m = np.zeros((100, 400), np.uint8)
-    m[50, 10:390] = 1  # the trace, long and thin
-    m[20:30, 100:104] = 1  # a glyph stroke inside a text box
-    m[22:26, 120:130] = 1  # another glyph inside the same box
-    m[24:27, 104:120] = 1  # touching letters, wider than a glyph
-    m[60:90, 300:330] = 1  # a solid icon, away from any text box
-    out = drop_printed_text(m.copy(), [[95, 15, 135, 35]], 60.0, 2.0)
-    assert out[50].sum() == 380 and out[20:30, 100:130].sum() == 0 and out[60:90, 300:330].sum() == 900
-    out = drop_solid_blobs(out, 20.0, 0.6)
-    assert out[60:90, 300:330].sum() == 0 and out[50].sum() == 380
-
-
 def test_pulse_finder_skips_a_filled_square():
     from src.digitize.pulses import find_pulses
 
@@ -212,30 +197,6 @@ def test_pulse_finder_skips_a_filled_square():
     cfg = {"gray_max": 130, "height_tolerance": [0.85, 1.15], "width_mm": [4.0, 9.0], "min_area": 80, "solid_fill_max": 0.5}
     found = find_pulses(gray, grid, 5.0, (0, 400, 0, 200), cfg)
     assert len(found) == 1 and found[0]["bbox"][0] == 200
-
-
-def test_solid_filter_keeps_a_shadow_sized_blob():
-    from src.digitize.mask import drop_solid_blobs
-
-    m = np.zeros((300, 300), np.uint8)
-    m[10:40, 10:40] = 1    # icon sized
-    m[100:290, 20:290] = 1  # shadow sized
-    out = drop_solid_blobs(m.copy(), 20.0, 0.6, 60.0)
-    assert out[10:40, 10:40].sum() == 0 and out[100:290, 20:290].sum() == (190 * 270)
-
-
-def test_read_label_box_removes_a_thick_glyph_touching_the_trace():
-    from src.digitize.mask import threshold_mask
-
-    gray = np.full((120, 300), 255, np.uint8)
-    gray[70:72, 10:290] = 0      # the trace, 2 px thick
-    gray[40:72, 150:157] = 0     # a bold glyph stroke, 7 px thick, touching the trace
-    cfg = {"gray_max": 130, "label_max_area": 1500, "label_max_width": 70, "glyph_core": 2.5, "glyph_reach": 4, "min_component": 50,
-           "label_core": 2.5, "label_pad_mm": 1.0, "label_reach": 3}
-    far = threshold_mask(gray, (0, 120), (250, 280), [], cfg)   # the label window points elsewhere
-    assert far[40:60, 150:157].sum() > 0
-    near = threshold_mask(gray, (0, 120), (250, 280), [], cfg, None, 10.0, [[145.0, 38.0, 162.0, 60.0]])
-    assert near[40:60, 150:157].sum() == 0 and near[70:72, 10:140].sum() > 0
 
 
 def test_overrun_past_the_other_leads_is_cut():

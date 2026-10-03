@@ -20,7 +20,6 @@ zone:
   margin_px: 6
 labels:
   label_regex: '^(I{1,3}|aV[RLFUlf]|a[UV][RLF]|[UV][1-6])$'
-  fallback_columns: [255, 345]
 pulses:
   gray_max: 130
   height_tolerance: [0.85, 1.15]

@@ -219,7 +219,7 @@ class Digitizer:
     def trace(self, front: PanelFront, prob: np.ndarray | None = None, mask_kind: str | None = None, tracking: str | None = None) -> PanelRecord:
         """Trace mask, lead separation and sampling for a panel whose front part is known.
 
-        `mask_kind` (threshold, trace_net, openecg) and `tracking` (baseline, overlap) override the layout, so several methods
+        `mask_kind` (openecg, trace_net) and `tracking` (baseline, overlap) override the layout, so several methods
         can be run on the same saved fronts (src.digitize.methods)."""
         kind = mask_kind or self.layout["mask"]["kind"]
         lay, cfg = self.layout, self.cfg
@@ -236,18 +236,13 @@ class Digitizer:
                 mask = self.tracenet.mask(crop, grid.px_per_mm[0])
                 mask[:max(y0 - cy0, 0)] = 0
                 mask[y1 - cy0:] = 0
-            elif kind == "openecg" or prob is not None:  # the pretrained Open-ECG-Digitizer U-Net, on the crop or cut from a page-wide probability
+            elif kind in ("openecg", "unet"):  # the pretrained Open-ECG-Digitizer U-Net, on the crop or cut from a page-wide probability
                 p = self.unet.probability(crop) if prob is None else prob[cy0:cy1, cx0:cx1]
                 mask = (p > cfg["unet"]["threshold"]).astype(np.uint8)
                 mask[:zone[0]] = 0
                 mask[zone[1]:] = 0
             else:
-                gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-                label_re = re.compile(lay["labels"]["label_regex"])
-                names = [t for t in texts + front.page_names if label_re.match(t["text"].strip())]  # the crop read and the page read, in crop pixels
-                lab_cols = text.label_columns(texts, tuple(lay["labels"]["fallback_columns"]), lay["labels"])
-                printed = [t["bbox"] for t in texts if not label_re.match(t["text"].strip()) and len(re.sub(r"\W", "", t["text"])) >= 2]
-                mask = maskmod.threshold_mask(gray, zone, lab_cols, [p["bbox"] for p in front.pulses], lay["mask"], printed, grid.px_per_mm[0], [t["bbox"] for t in names])
+                raise ValueError(f"unknown mask kind {kind!r}")
             mask[:, :x0 - cx0] = 0
             mask[:, x1 - cx0:] = 0
             mask = cut_at_gap(mask, lay["cut_gap_px"])

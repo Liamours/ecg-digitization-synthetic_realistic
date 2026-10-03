@@ -1,7 +1,6 @@
 """Trace segmentation network: which pixels of a panel crop are ECG trace.
 
-A small U-Net trained on synthetic panels whose trace masks are exact (src.train_trace_net). It replaces the threshold
-rules: printed text, lead names, the calibration step, the header icon and the grid are background by construction of
+A small U-Net trained on synthetic panels whose trace masks are exact (src.train_trace_net). Printed text, lead names, the calibration step, the header icon and the grid are background by construction of
 the labels. The network works at the generator's scale (`train_px_per_mm`), so a crop is resized to that scale using the
 pitch of its own fitted grid, and the probability map is resized back.
 """

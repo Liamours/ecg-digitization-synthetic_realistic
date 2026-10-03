@@ -29,11 +29,3 @@ def trace_zone(texts: list[dict], height: int, cfg: dict) -> tuple[int, int]:
     foots = [t["bbox"][1] for t in texts if foot.search(t["text"])]
     return (int(max(heads) + cfg["margin_px"]) if heads else 0), (int(min(foots) - cfg["margin_px"]) if foots else height)
 
-
-def label_columns(texts: list[dict], fallback: tuple[int, int], cfg: dict) -> tuple[int, int]:
-    """Horizontal extent of the printed lead names, where glyph strokes must be removed from the trace mask."""
-    lab = re.compile(cfg["label_regex"])
-    boxes = [t["bbox"] for t in texts if lab.match(t["text"].strip())]
-    if boxes:
-        return int(min(b[0] for b in boxes) - 8), int(max(b[2] for b in boxes) + 8)
-    return fallback

@@ -1,8 +1,8 @@
 """Run one trace method and one lead-separation method on a saved front stage (src.digitize.front).
 
 The front stage fixed the page rotation, the panels, lead names, gain and grid map; this reads those files and only does
-the uncertain part, so methods can be compared on identical input. Trace methods (--mask): `threshold` (the rules),
-`trace_net` (the network of src.train_trace_net), `openecg` (the pretrained Open-ECG-Digitizer U-Net). Lead separation
+the uncertain part, so methods can be compared on identical input. Trace methods (--mask): `openecg` (the pretrained
+Open-ECG-Digitizer U-Net), `trace_net` (the network of src.train_trace_net). Lead separation
 (--split): `baseline` (row bands with a slowly moving baseline), `overlap` (continuity with the previous column).
 
 Per page it writes the same files as src.digitize.run (panel json and csv, record.csv, record.json, page.json), so the
@@ -10,7 +10,7 @@ scorer, the checks and the metrics collector read a method folder like any run. 
 exists is skipped.
 
 Usage:
-    python -m src.digitize.methods --config configs/digitize.yml --layout mac400 --front @inferences/front_mac400-scan --mask trace_net --split baseline [--device cuda]
+    python -m src.digitize.methods --config configs/digitize.yml --layout mac400 --front @inferences/front_mac400-scan --mask openecg --split baseline [--device cuda]
 """
 import argparse
 import csv
@@ -29,7 +29,7 @@ from src.digitize import assemble
 from src.digitize.pipeline import Digitizer, load_layout
 from src.digitize.record import PanelFront
 
-MASKS = ("threshold", "trace_net", "openecg")
+MASKS = ("openecg", "trace_net")
 SPLITS = ("baseline", "overlap")
 
 
