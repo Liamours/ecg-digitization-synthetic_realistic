@@ -157,7 +157,9 @@ class Digitizer:
                 read.append(g)
         return Counter(read).most_common(1)[0][0] if read else self.cfg["gain"]["assumed"]
 
-    def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None) -> PanelRecord:
+    def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None,
+              force_gain: float | None = None, force_labels: list[str] | None = None) -> PanelRecord:
+        """force_gain and force_labels replace what the page would say; they exist for the oracle runs (src.digitize.oracle)."""
         lay, cfg = self.layout, self.cfg
         mx, my = cfg["panel_margin_px"]
         x0, y0, x1, y1 = box
@@ -173,13 +175,15 @@ class Digitizer:
             labels2, source2 = text.read_labels(texts + extra, lay["label_sets"], index)
             if source2 == "ocr":
                 labels, label_source = labels2, "page_ocr"
+        if force_labels is not None:
+            labels, label_source = list(force_labels), "oracle"
         rec = PanelRecord(f"panel{index}", lay["name"], box, [cx0, cy0], labels, label_source, None, "", Grid("dot", np.zeros(2), np.zeros(2), np.zeros(2)),
                           text_boxes=[{"text": t["text"], "bbox": [t["bbox"][0] + cx0, t["bbox"][1] + cy0, t["bbox"][2] + cx0, t["bbox"][3] + cy0]} for t in texts])
         try:
             grid = fit_grid(gray, lay["grid"])
             zone = text.trace_zone(texts, gray.shape[0], lay["zone"])
             window = (0, gray.shape[1], zone[0], zone[1] + 40)
-            gain, source = text.read_gain(texts, cfg["gain"]["allowed"]), "ocr"
+            gain, source = (force_gain, "oracle") if force_gain is not None else (text.read_gain(texts, cfg["gain"]["allowed"]), "ocr")
             if gain is None:
                 found = [p for g in cfg["gain"]["allowed"] for p in pulses.find_pulses(gray, grid, g, window, lay["pulses"])]
                 gain, source = pulses.gain_from_pulses([p["height_mm"] for p in found], cfg["gain"]["allowed"], cfg["gain"]["tolerance"]), "pulse"

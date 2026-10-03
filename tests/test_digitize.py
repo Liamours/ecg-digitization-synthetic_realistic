@@ -117,10 +117,12 @@ def test_waveform_score():
 def test_entry_points_import():
     """The command line modules are not otherwise imported by the tests, so a syntax slip in one would go unseen."""
     import src.digitize.checks  # noqa: F401
+    import src.digitize.oracle  # noqa: F401
     import src.digitize.pipeline  # noqa: F401
     import src.digitize.report  # noqa: F401
     import src.digitize.run  # noqa: F401
     import src.digitize.score  # noqa: F401
+    import src.digitize.warp  # noqa: F401
 
 
 def test_paths_resolve_roots_and_dataset_aliases():
@@ -244,3 +246,23 @@ def test_overrun_past_the_other_leads_is_cut():
     masks[2][75, 500:560] = 1
     out = trim_early_starts(masks, grid, 2.0, 0.5, 2.0)
     assert np.nonzero(out[2])[1].max() < 560 and np.nonzero(out[2])[1].max() <= 505 and out[0].sum() == masks[0].sum()
+
+
+def test_warp_measurement_recovers_a_known_perspective():
+    import cv2
+
+    from src.digitize.warp import measure_panel
+
+    h = np.array([[11.8, 0.4, 150.0], [-0.3, 11.8, 120.0], [0.00004, -0.00001, 1.0]])  # 11.8 px per mm, tilted, with a perspective term
+    ij = np.array([(i, j) for i in range(-3, 80) for j in range(-3, 55)], np.float64)
+    xy = cv2.perspectiveTransform(ij[None], h)[0]
+    img = np.full((820, 1250), 255, np.uint8)
+    for x, y in xy:
+        if 8 < x < 1240 and 8 < y < 810:
+            cv2.circle(img, (int(round(x)), int(round(y))), 1, 0, -1)
+    cfg = {"blackhat_kernel": 9, "blackhat_contrast": 28, "dot_area": [4, 45], "dot_max_side": 9, "pitch_px_range": [9.0, 15.0], "angle_range_deg": 6.0}
+    m = measure_panel(img, cfg)
+    jl = cv2.perspectiveTransform(np.array([[[1.0, 25.0], [2.0, 25.0]]], np.float64), h)[0]
+    jr = cv2.perspectiveTransform(np.array([[[69.0, 25.0], [70.0, 25.0]]], np.float64), h)[0]
+    truth = 100 * (np.hypot(*(jr[1] - jr[0])) / np.hypot(*(jl[1] - jl[0])) - 1)
+    assert abs(m["persp_x_pct"] - truth) < 1.5 and m["rms_homography_mm"] < 0.1 and m["rms_affine_mm"] > m["rms_homography_mm"]
