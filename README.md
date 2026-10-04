@@ -21,7 +21,7 @@ Every model in the pipeline is a published pretrained model, and the trace and l
 
 The third-party source files are in `third_party/` as unmodified copies with their licenses (`third_party/README.md` lists source, commit and citation). The trace network's weights (90 MB) are downloaded by `scripts/get_weights.sh`.
 
-Result on the 39 scans of `ecg-mac400-scan` (188 panels found, no ground truth): 385 of 507 digitized leads pass the quality flag (coverage at least 0.9, peak to peak at most 6 mV). The flag is not accuracy.
+Result on the 39 scans of `ecg-mac400-scan` (188 panels found, no ground truth): 391 of 515 digitized leads pass the quality flag (coverage at least 0.9, peak to peak at most 6 mV). The flag is not accuracy.
 
 Other methods stay selectable for comparison (`tracking` in `configs/layouts/mac400.yml`, or `--split` and `--mask` of `src.digitize.methods`): ecgtizer `full` and `lazy`, Open-ECG-Digitizer's own signal extractor (`openecg_lines`), this repository's row bands (`baseline`, 418 of 538 by the same flag) and overlap tracker, and this repository's small trace network (`trace_net`).
 
