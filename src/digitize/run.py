@@ -57,6 +57,8 @@ def main() -> None:
     ap.add_argument("--report", action="store_true", help="write report.png (page with boxes, plus every lead) in each page folder")
     ap.add_argument("--final-only", action="store_true", help="keep per page only the final labels (record.csv, record.json) and report.png (the original page with panel boxes, text boxes and traces, plus every lead); no per-panel files. The done marker is record.json")
     ap.add_argument("--device", help="cpu, cuda or auto; overrides the config")
+    ap.add_argument("--manifest", type=paths.resolve, help="a dataset's _labels/manifest.csv; with it only pages whose page_style equals --style are run")
+    ap.add_argument("--style", default="mac400", help="page_style to keep when --manifest is given")
     ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @mac400-scan/scan_29 style aliases work, see configs/paths.yml")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
@@ -69,6 +71,10 @@ def main() -> None:
                         format="%(asctime)s %(message)s", encoding="utf-8")
     listed = [paths.resolve(x.strip()) for x in args.list.read_text(encoding="utf-8").splitlines() if x.strip()] if args.list else []
     pool = [f for f in collect(args.inputs) + listed if not any(x in str(f) for x in args.exclude)]
+    if args.manifest:  # keep only the pages the dataset's manifest gives this page style
+        with args.manifest.open(encoding="utf-8") as fh:
+            keep = {(args.manifest.parent.parent / r["relative_path"]).resolve() for r in csv.DictReader(fh) if r["page_style"] == args.style}
+        pool = [f for f in pool if f.resolve() in keep]
     if args.sample:
         pool = random.Random(args.seed).sample(pool, min(args.sample, len(pool)))
     files = [f for f in pool if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / marker).exists()]
