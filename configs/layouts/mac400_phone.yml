@@ -1,14 +1,15 @@
-name: mac400_wide_unet_overlap
+# The canonical pipeline on phone photos of MAC 400 pages: as mac400.yml, with a wider range for the dot pitch.
+name: mac400_phone
 mode: panel
 panel_finding: configs/pages.yml
 label_sets: [[I, II, III], [aVR, aVL, aVF], [V1, V2, V3], [V4, V5, V6]]
 rows: 3
 rows_mode: equal
-tracking: overlap
+tracking: ecgtizer_fragmented   # canonical; others: ecgtizer_full, ecgtizer_lazy, openecg_lines (open source), baseline, overlap (this repo's row bands)
 cut_gap_px: 45
 grid:
   kind: dot
-  pitch_px_range: [6.0, 16.0]
+  pitch_px_range: [6.0, 16.0]   # phone photos: the page fills less of the frame than on a 300 dpi scan
   angle_range_deg: 6.0
   blackhat_kernel: 9
   blackhat_contrast: 28
@@ -25,11 +26,6 @@ pulses:
   height_tolerance: [0.85, 1.15]
   width_mm: [4.0, 9.0]
   min_area: 80
+  solid_fill_max: 0.5
 mask:
-  kind: unet
-  gray_max: 130
-  min_component: 100
-  label_max_area: 1500
-  label_max_width: 70
-  glyph_core: 2.5
-  glyph_reach: 4
+  kind: openecg   # the pretrained Open-ECG-Digitizer U-Net (configs/digitize.yml, unet); trace_net is the other kind

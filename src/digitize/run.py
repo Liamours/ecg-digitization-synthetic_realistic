@@ -1,6 +1,6 @@
 """Digitize ECG pages with a layout.
 
-Each page writes <out-dir>/<page stem>/: one JSON and CSV per panel, page.json (rotation, panel confidences),
+Each page writes <out-dir>/<page stem>/: one JSON and CSV per panel, page.json (rotation, panel confidences), record.csv and record.json (the 12 leads and their labels),
 overlay_original.jpg and overlay_upright.jpg (the results drawn back on the page). <out-dir>/progress.csv gets one row per page (seconds, panels, leads ok, status, error), the log file one line per page with an ETA from the last 20 pages. Resumable: a page whose page.json
 exists is skipped, so a stopped run continues where it stopped.
 
@@ -12,6 +12,7 @@ import csv
 import json
 import logging
 import random
+import shutil
 import time
 from collections import deque
 from datetime import datetime, timedelta
@@ -54,10 +55,15 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--exclude", nargs="*", default=[], help="skip paths containing any of these strings")
     ap.add_argument("--report", action="store_true", help="write report.png (page with boxes, plus every lead) in each page folder")
+    ap.add_argument("--final-only", action="store_true", help="keep per page only the final labels (record.csv, record.json) and report.png (the original page with panel boxes, text boxes and traces, plus every lead); no per-panel files. The done marker is record.json")
+    ap.add_argument("--device", help="cpu, cuda or auto; overrides the config")
     ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @mac400-scan/scan_29 style aliases work, see configs/paths.yml")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    if args.device:
+        cfg["device"] = args.device
     layout = load_layout(args.layout)
+    marker = "record.json" if args.final_only else "page.json"
     paths.resolve(cfg["log_dir"]).mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=paths.resolve(cfg["log_dir"]) / f"digitize-{layout['name']}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
                         format="%(asctime)s %(message)s", encoding="utf-8")
@@ -65,7 +71,7 @@ def main() -> None:
     pool = [f for f in collect(args.inputs) + listed if not any(x in str(f) for x in args.exclude)]
     if args.sample:
         pool = random.Random(args.seed).sample(pool, min(args.sample, len(pool)))
-    files = [f for f in pool if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / "page.json").exists()]
+    files = [f for f in pool if not (args.out_dir / f"{f.parent.name}__{f.stem}".replace(" ", "_") / marker).exists()]
     done_before = len(pool) - len(files)
     log.info("%s: %d pages pending, %d already done (resuming)", layout["name"], len(files), done_before)
     progress = args.out_dir / "progress.csv"
@@ -85,20 +91,27 @@ def main() -> None:
                 records, up, k = digitizer.run_panel_page(image)
             else:
                 records, up, k = digitizer.run_fixed_page(image), image, 0
+            work = out / "_work" if args.final_only else out  # final-only: the per-panel files live only until the picture is drawn
+            work.mkdir(parents=True, exist_ok=True)
             for r in records:
-                r.save(out)
+                r.save(work)
             t_rec, signal, lead_labels, image_labels = assemble.page_record(records, cfg["record"], cfg["sampling"]["mm_per_s"])
-            assemble.save(out, t_rec, signal, lead_labels, {"source": str(path), "rotation_ccw_deg": k, **image_labels})
+            if not args.final_only:
+                assemble.save(out, t_rec, signal, lead_labels, {"source": str(path), "rotation_ccw_deg": k, **image_labels})
             overlay = reverse.draw(up, records, cfg["sampling"])
-            save_overlay(out / "overlay_upright.jpg", overlay, cfg["overlay_max_side"])
+            save_overlay(work / "overlay_upright.jpg", overlay, cfg["overlay_max_side"])
             if k:
-                save_overlay(out / "overlay_original.jpg", np.rot90(overlay, -(k // 90)).copy(), cfg["overlay_max_side"])
+                save_overlay(work / "overlay_original.jpg", np.rot90(overlay, -(k // 90)).copy(), cfg["overlay_max_side"])
             n_panels, ok, n_leads = len(records), sum(v.flag == "ok" for r in records for v in r.leads.values()), sum(len(r.leads) for r in records)
             # page.json last: it is the done marker, so a crash before it repeats one page and never loses one silently
-            (out / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k, "work_scale": round(work_scale, 4),
-                                                       "panels": {r.panel_id: {"confidence": round(r.confidence, 3), "error": r.error, "leads_ok": sum(v.flag == "ok" for v in r.leads.values()), "leads": len(r.leads)} for r in records}}, indent=1), encoding="utf-8")
-            if args.report:
-                report.make(out)
+            (work / "page.json").write_text(json.dumps({"source": str(path), "layout": layout["name"], "rotation_ccw_deg": k, "work_scale": round(work_scale, 4),
+                                                        "panels": {r.panel_id: {"confidence": round(r.confidence, 3), "error": r.error, "leads_ok": sum(v.flag == "ok" for v in r.leads.values()), "leads": len(r.leads)} for r in records}}, indent=1), encoding="utf-8")
+            if args.report or args.final_only:
+                report.make(work)
+            if args.final_only:
+                shutil.move(str(work / "report.png"), str(out / "report.png"))
+                shutil.rmtree(work)
+                assemble.save(out, t_rec, signal, lead_labels, {"source": str(path), "rotation_ccw_deg": k, **image_labels})  # last: record.json is the done marker
         except Exception as exc:
             log.exception("%s failed: %r", path, exc)
             status, error, failed = "error", repr(exc)[:120].replace(",", ";"), failed + 1
