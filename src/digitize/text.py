@@ -43,10 +43,14 @@ def fill_unread_sets(named: list[tuple[list[str], str]], label_sets: list[list[s
 
 
 def trace_zone(texts: list[dict], height: int, cfg: dict) -> tuple[int, int]:
-    """Rows between the header text and the footer text; the margin keeps text out of the trace mask."""
+    """Rows between the header text and the footer text; the margin keeps text out of the trace mask.
+
+    A header word counts only in the upper half of the crop and a footer word only in the lower half: the device's second
+    print format repeats `MAC 400` in its footer row, which once put the header below the footer and left no rows at all."""
     head = re.compile(cfg["header_regex"], re.I)
     foot = re.compile(cfg["footer_regex"], re.I)
-    heads = [t["bbox"][3] for t in texts if head.search(t["text"])]
-    foots = [t["bbox"][1] for t in texts if foot.search(t["text"])]
+    mid = lambda t: (t["bbox"][1] + t["bbox"][3]) / 2
+    heads = [t["bbox"][3] for t in texts if head.search(t["text"]) and mid(t) < height / 2]
+    foots = [t["bbox"][1] for t in texts if foot.search(t["text"]) and mid(t) > height / 2]
     return (int(max(heads) + cfg["margin_px"]) if heads else 0), (int(min(foots) - cfg["margin_px"]) if foots else height)
 

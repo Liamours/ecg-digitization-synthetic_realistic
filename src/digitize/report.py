@@ -1,4 +1,4 @@
-"""One picture per digitized page: the original page with panel boxes, text boxes, and traces on the left, every
+"""One picture per digitized page: the page turned upright with panel boxes, text boxes, and traces on the left, every
 digitized lead (mV over time) on the right. Reads only what run.py wrote, so it also works on old runs.
 
 Usage:
@@ -32,7 +32,7 @@ def read_leads(csv_path: Path) -> tuple[np.ndarray, dict[str, tuple[np.ndarray, 
 
 def make(page_dir: Path, max_side: int = 1500) -> Path:
     page = json.loads((page_dir / "page.json").read_text(encoding="utf-8"))
-    names = ["overlay_original.jpg", "overlay_upright.jpg", "overlay_original.png", "overlay_upright.png"]
+    names = ["overlay_upright.jpg", "overlay_upright.png", "overlay_original.jpg", "overlay_original.png"]  # the upright page first: a photo taken sideways or upside down is shown turned the right way
     img = cv2.imread(str(next(page_dir / n for n in names if (page_dir / n).exists())))
     s = min(1.0, max_side / max(img.shape[:2]))
     img = cv2.cvtColor(cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)

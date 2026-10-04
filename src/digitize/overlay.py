@@ -42,11 +42,23 @@ def main() -> None:
         (x0, _, x1, _), (cx0, _), crop = front.box, front.crop_origin, front.crop
         p = d.unet.probability(crop)
         mask = (p > cfg["unet"]["threshold"]).astype(np.uint8)  # the same cuts as Digitizer.trace
+        counts = [("trace probability above the threshold", int(mask.sum()))]
         mask[:front.zone[0]] = 0
         mask[front.zone[1]:] = 0
+        counts.append((f"between the header and footer text, rows {front.zone[0]} to {front.zone[1]} of {crop.shape[0]}", int(mask.sum())))
         mask[:, :x0 - cx0] = 0
         mask[:, x1 - cx0:] = 0
-        mask = cut_at_gap(mask, d.layout["cut_gap_px"])
+        counts.append((f"inside the panel box, columns {x0 - cx0} to {x1 - cx0} of {crop.shape[1]}", int(mask.sum())))
+        print(f"{args.page} panel{front.index} trace pixels: " + "; ".join(f"{k}: {v}" for k, v in counts) + f"; highest probability {p.max():.2f}")
+        seen = cv2.cvtColor((255 * np.clip(p, 0, 1)).astype(np.uint8), cv2.COLOR_GRAY2BGR)  # what the trace network sees, with the rows kept between the text bands
+        for y in front.zone:
+            cv2.line(seen, (0, int(y)), (seen.shape[1], int(y)), (0, 200, 255), 2)
+        cv2.imwrite(str(args.out_dir / f"{args.page}_panel{front.index}_trace_probability.jpg"), np.vstack([crop, seen]), [cv2.IMWRITE_JPEG_QUALITY, 85])
+        try:
+            mask = cut_at_gap(mask, d.layout["cut_gap_px"])
+        except ValueError as exc:
+            print(f"{args.page} panel{front.index}: {exc}")
+            continue
         bands = leadmod.split_rows(mask, d.layout["rows"], d.layout["rows_mode"])
         tiles = []
         for how in ("baseline", "overlap", *METHODS):
