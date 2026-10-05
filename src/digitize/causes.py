@@ -9,7 +9,7 @@ into exactly one row. A slot that is not ok is put down to the first step that f
 - `missing, no panel named for it`: no panel on the page carries the lead's name. Split by whether the page has fewer than
   four ECG panels (a panel was not found) or four and more (a panel carries another set's names).
 
-It also counts how the lead names of the panels were obtained (read on the panel, read on the page, or the template order),
+The table is also written to <run>/causes.csv. It also counts how the lead names of the panels were obtained (read on the panel, read on the page, or the template order),
 so the share of the result that rests on text reading is visible. Real scans have no ground truth: a lead digitized under a
 wrong name counts as ok here.
 
@@ -17,6 +17,7 @@ Usage:
     python -m src.digitize.causes --run @inferences/canonical_mac400-scan
 """
 import argparse
+import csv
 import json
 from collections import Counter
 
@@ -56,6 +57,8 @@ def main() -> None:
             else:
                 slots["missing, not separated"] += 1
     total = sum(slots.values())
+    with (args.run / "causes.csv").open("w", newline="", encoding="utf-8") as fh:  # the same table for other tools to read
+        csv.writer(fh).writerows([["lead_slot", "count"]] + sorted(slots.items(), key=lambda kv: (kv[0] != "ok", -kv[1])))
     print(f"{len(pages)} pages, {total} lead slots\n\n| Lead slot | Count | Share |\n|---|---|---|")
     for k, v in sorted(slots.items(), key=lambda kv: (kv[0] != "ok", -kv[1])):
         print(f"| {k} | {v} | {100 * v / total:.0f}% |")
