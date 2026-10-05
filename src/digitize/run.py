@@ -67,7 +67,7 @@ def main() -> None:
     layout = load_layout(args.layout)
     marker = "record.json" if args.final_only else "page.json"
     paths.resolve(cfg["log_dir"]).mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(filename=paths.resolve(cfg["log_dir"]) / f"digitize-{layout['name']}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
+    logging.basicConfig(filename=paths.resolve(cfg["log_dir"]) / f"digitize-{args.out_dir.name}-{datetime.now():%Y%m%d}.log", level=logging.INFO,
                         format="%(asctime)s %(message)s", encoding="utf-8")
     listed = [paths.resolve(x.strip()) for x in args.list.read_text(encoding="utf-8").splitlines() if x.strip()] if args.list else []
     pool = [f for f in collect(args.inputs) + listed if not any(x in str(f) for x in args.exclude)]
