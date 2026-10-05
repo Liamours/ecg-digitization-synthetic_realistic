@@ -235,7 +235,7 @@ class Digitizer:
             labels, label_source = list(force_labels), "oracle"
         front = PanelFront(index, lay["name"], box, [cx0, cy0], crop, texts, page_names, labels, label_source)
         try:
-            grid = fit_grid(gray, lay["grid"])
+            grid = fit_grid(gray, lay["grid"], ocr.resolve_device(cfg["device"]))
             zone = text.trace_zone(texts, gray.shape[0], lay["zone"])
             window = (0, gray.shape[1], zone[0], zone[1] + 40)
             gain, source = (force_gain, "oracle") if force_gain is not None else (text.read_gain(texts, cfg["gain"]["allowed"]), "ocr")

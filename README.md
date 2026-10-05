@@ -33,7 +33,7 @@ scripts/get_weights.sh
 scripts/setup_gpu_env.sh
 ```
 
-`uv sync` builds the repo's environment (CPU torch), enough for the whole pipeline. `setup_gpu_env.sh` builds `../../.venvs/digitize_gpu` (CUDA torch) for the trace stage on a GPU; it is optional.
+`uv sync` builds the repo's environment (CPU torch), enough for the whole pipeline at about 35 s per page. `setup_gpu_env.sh` builds `../../.venvs/digitize_gpu` (CUDA torch and every dependency): with `--device cuda` the text reading, grid search and trace network run on the GPU, about 6 s per page.
 
 Code, configs, scripts, and tests live here. Datasets, checkpoints, inference outputs, and logs live in the project root folders (`datasets/`, `models/`, `results/`, `logs/`), referenced through `configs/paths.yml` (roots and dataset aliases). Command line paths and config paths accept `@logs`, `@inferences/<run>`, `@mac400-scan/scan_29`.
 

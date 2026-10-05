@@ -22,31 +22,42 @@ def find_dots(gray: np.ndarray, kernel: int, contrast: int, area: tuple[int, int
     return cent[1:][keep]
 
 
-def _best(dots: np.ndarray, angles: np.ndarray, pitches: np.ndarray) -> tuple[float, float]:
+ANGLES_AT_ONCE = 16  # angles scored in one tensor: 16 angles x 100 pitches x 3000 dots x 8 bytes is 38 MB per term
+
+
+def _best(dots: np.ndarray, angles: np.ndarray, pitches: np.ndarray, device: str = "cpu") -> tuple[float, float]:
+    """The angle and pitch at which the dots, projected on both lattice axes, are most periodic: the largest
+    |sum exp(2 pi i u / pitch)| + |sum exp(2 pi i v / pitch)|. Scored for many angles at once in torch, on the GPU when given;
+    this search was half of a page's time when it ran angle by angle in numpy."""
+    import torch
+
+    d = torch.as_tensor(dots, dtype=torch.float64, device=device)
+    k = 2 * torch.pi / torch.as_tensor(pitches, dtype=torch.float64, device=device)
     best = (-1.0, 0.0, 0.0)
-    for a in angles:
-        c, s = np.cos(np.radians(a)), np.sin(np.radians(a))
-        u = dots[:, 0] * c + dots[:, 1] * s
-        v = -dots[:, 0] * s + dots[:, 1] * c
-        score = np.abs(np.exp(2j * np.pi * u[None] / pitches[:, None]).sum(1)) + np.abs(np.exp(2j * np.pi * v[None] / pitches[:, None]).sum(1))
-        i = int(np.argmax(score))
-        if score[i] > best[0]:
-            best = (float(score[i]), float(a), float(pitches[i]))
+    for chunk in np.array_split(angles, max(1, -(-len(angles) // ANGLES_AT_ONCE))):
+        a = torch.as_tensor(np.radians(chunk), dtype=torch.float64, device=device)[:, None]
+        score = 0
+        for w in (d[:, 0] * torch.cos(a) + d[:, 1] * torch.sin(a), -d[:, 0] * torch.sin(a) + d[:, 1] * torch.cos(a)):  # u, v: angles x dots
+            phase = w[:, None, :] * k[None, :, None]                                                                    # angles x pitches x dots
+            score = score + torch.hypot(torch.cos(phase).sum(2), torch.sin(phase).sum(2))
+        i = int(torch.argmax(score))  # first maximum, as the angle-by-angle search took it
+        if float(score.flatten()[i]) > best[0]:
+            best = (float(score.flatten()[i]), float(chunk[i // len(pitches)]), float(pitches[i % len(pitches)]))
     return best[1], best[2]
 
 
-def initial_angle_pitch(dots: np.ndarray, pitch_range: tuple[float, float], angle_range: float, rng: np.random.Generator) -> tuple[float, float]:
+def initial_angle_pitch(dots: np.ndarray, pitch_range: tuple[float, float], angle_range: float, rng: np.random.Generator, device: str = "cpu") -> tuple[float, float]:
     """Coarse-to-fine search of the lattice angle and pitch on a subsample of the dots."""
     pts = dots if len(dots) <= MAX_DOTS else dots[rng.choice(len(dots), MAX_DOTS, replace=False)]
-    ang, pitch = _best(pts, np.arange(-angle_range, angle_range + 1e-9, 0.2), np.arange(pitch_range[0], pitch_range[1], 0.1))
-    return _best(pts, np.arange(ang - 0.25, ang + 0.2501, 0.02), np.arange(pitch - 0.15, pitch + 0.1501, 0.01))
+    ang, pitch = _best(pts, np.arange(-angle_range, angle_range + 1e-9, 0.2), np.arange(pitch_range[0], pitch_range[1], 0.1), device)
+    return _best(pts, np.arange(ang - 0.25, ang + 0.2501, 0.02), np.arange(pitch - 0.15, pitch + 0.1501, 0.01), device)
 
 
-def fit_dot_grid(gray: np.ndarray, cfg: dict) -> Grid:
+def fit_dot_grid(gray: np.ndarray, cfg: dict, device: str = "cpu") -> Grid:
     dots = find_dots(gray, cfg["blackhat_kernel"], cfg["blackhat_contrast"], tuple(cfg["dot_area"]), cfg["dot_max_side"])
     if len(dots) < 200:
         raise ValueError(f"too few grid dots found ({len(dots)})")
-    ang, pitch = initial_angle_pitch(dots, tuple(cfg["pitch_px_range"]), cfg["angle_range_deg"], np.random.default_rng(42))
+    ang, pitch = initial_angle_pitch(dots, tuple(cfg["pitch_px_range"]), cfg["angle_range_deg"], np.random.default_rng(42), device)
     r = np.radians(ang)
     a1 = pitch * np.array([np.cos(r), np.sin(r)])
     a2 = pitch * np.array([-np.sin(r), np.cos(r)])
@@ -108,5 +119,5 @@ def fit_line_grid(gray: np.ndarray, cfg: dict) -> Grid:
     return Grid("line", np.zeros(2), a1, a2)
 
 
-def fit_grid(gray: np.ndarray, cfg: dict) -> Grid:
-    return fit_dot_grid(gray, cfg) if cfg["kind"] == "dot" else fit_line_grid(gray, cfg)
+def fit_grid(gray: np.ndarray, cfg: dict, device: str = "cpu") -> Grid:
+    return fit_dot_grid(gray, cfg, device) if cfg["kind"] == "dot" else fit_line_grid(gray, cfg)
