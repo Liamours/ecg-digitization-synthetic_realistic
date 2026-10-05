@@ -1,6 +1,5 @@
-datasets_dir: '@datasets'
-page_style_dir: '@inferences/page_style'
+text_config: configs/text_extract.yml   # datasets, source suffixes and excluded folders: the same files the text was read from
+style_config: configs/page_style.yml   # the style patterns and the label for no match
 device_styles: [mac400, edan, kardia, fukuda]
 blank_ink_fraction: 0.01  # the 14 blank ekg-esta scans score 0.000 to 0.003
 ecg_ink_fraction: 0.08  # blank and handwritten forms score at most 0.052, ECG pages at least 0.109 (574 non-device pages checked)
-image_suffixes: [".jpg", ".jpeg", ".png"]
