@@ -5,6 +5,7 @@ rotation_runs:   # canonical digitize runs whose record.json gives each page's r
   mac400-scan: ['@inferences/canonical_mac400-scan']
   esta: ['@inferences/canonical_esta']
 device: cuda
+max_side: 3600   # px, long side of an image given to docling, as configs/digitize.yml work_side
 seed: 42
 log_dir: '@logs'
 exclude:   # top-level folders of derived files inside a dataset, not sources

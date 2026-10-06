@@ -5,7 +5,7 @@ Every source file on disk gets one row (the same files src.text_extract reads: f
 
 - page_id: kept from the old manifest when the file had a row there, else the relative path without its suffix, `/` as `__`
 - relative_path, file_type, md5, pages (1 for an image, the page count for a PDF), width_px, height_px, dpi (images only)
-- is_duplicate, duplicate_of: a file with the md5 of an earlier file (path order) is a duplicate of that file's page_id
+- is_duplicate, duplicate_of: files with the same md5 are copies of the one with the shortest path, whose page_id they name
 - page_style, style_evidence: the device or form style found in the file's docling text (`<dataset>/_text/`, src.text_extract)
   by the patterns of configs/page_style.yml, and the matched words; `-` when nothing matches, `blank` when also almost no ink
 - ink_fraction (src.ink_fraction, images only), has_ecg: a device style, or ink at least `ecg_ink_fraction`
@@ -69,7 +69,7 @@ def build(alias: str, cfg: dict, styles: dict[str, str], unknown: str, stamp: st
     path = root / "_labels" / "manifest.csv"
     old = {r["relative_path"]: r for r in read_csv(path) if r.get("relative_path")}
     extra = [c for c in (next(iter(old.values())) if old else {}) if c not in SHARED + ["original_filename"]]
-    rows, first_by_md5 = [], {}
+    rows = []
     for p in tqdm(source_files(root, cfg["suffixes"], cfg["exclude"].get(alias, [])), desc=root.name):
         rel = p.relative_to(root).as_posix()
         prev = old.get(rel, {})
@@ -87,9 +87,13 @@ def build(alias: str, cfg: dict, styles: dict[str, str], unknown: str, stamp: st
                 page_style = "blank"
         has_ecg = page_style in cfg["device_styles"] or (ink != "" and ink >= cfg["ecg_ink_fraction"])
         rows.append({"page_id": page_id, "relative_path": rel, "file_type": p.suffix.lower().lstrip("."), "md5": digest, "pages": pages or "",
-                     "width_px": width, "height_px": height, "dpi": dpi, "is_duplicate": digest in first_by_md5, "duplicate_of": first_by_md5.get(digest, ""),
+                     "width_px": width, "height_px": height, "dpi": dpi, "is_duplicate": False, "duplicate_of": "",
                      "page_style": page_style, "style_evidence": evidence, "ink_fraction": ink, "has_ecg": has_ecg, **{c: prev.get(c, "") for c in extra}})
-        first_by_md5.setdefault(digest, page_id)
+    original = {}   # per md5 the shortest path: a copy is saved as `name(1).jpg` or `name (2).jpg` next to `name.jpg`
+    for r in sorted(rows, key=lambda r: (len(r["relative_path"]), r["relative_path"])):
+        original.setdefault(r["md5"], r["page_id"])
+    for r in rows:
+        r["is_duplicate"], r["duplicate_of"] = (True, original[r["md5"]]) if original[r["md5"]] != r["page_id"] else (False, "")
     path.parent.mkdir(exist_ok=True)
     if path.exists():
         (path.parent / "_backups").mkdir(exist_ok=True)

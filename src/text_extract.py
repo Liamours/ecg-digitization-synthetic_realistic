@@ -82,7 +82,9 @@ def main() -> None:
             else:
                 with tempfile.TemporaryDirectory() as tmp:
                     page = Path(tmp) / "page.png"
-                    ImageOps.exif_transpose(Image.open(path).convert("RGB")).rotate(k, expand=True).save(page)   # loaded as src.digitize.pipeline.load_image does, so `k` means the same
+                    img = ImageOps.exif_transpose(Image.open(path).convert("RGB")).rotate(k, expand=True)   # loaded as src.digitize.pipeline.load_image does, so `k` means the same
+                    img.thumbnail((cfg["max_side"], cfg["max_side"]))   # an 870 dpi page runs docling out of memory
+                    img.save(page)
                     doc = conv.convert(str(page)).document
             out.parent.mkdir(parents=True, exist_ok=True)
             out.with_suffix(".md").write_text(doc.export_to_markdown(traverse_pictures=True), encoding="utf-8")   # an ECG page is one picture to docling; its text sits inside it
