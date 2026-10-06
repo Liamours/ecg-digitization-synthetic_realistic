@@ -1,8 +1,5 @@
-"""Glue: one page to a list of PanelRecords.
-
-Two layout modes. `panel`: the page holds several MAC 400 style panels found from their printed footers; each panel gets its
-own grid map, gain, and label set. `page`: the page is one sheet (Fukuda, EDAN) whose regions are given as fractions of the
-image in the layout file; the page must be upright.
+"""Glue: one page to a list of PanelRecords. The page holds several MAC 400 panels found from their printed footers; each
+panel gets its own grid map, gain and lead-name set (`front`), then its trace mask, lead separation and samples (`trace`).
 """
 import re
 from collections import Counter
@@ -19,28 +16,24 @@ from src.digitize import mask as maskmod
 from src.digitize import ocr, pulses, selftest, text
 from src.digitize.gridmap import fit_grid
 from src.digitize.record import Grid, Lead, PanelFront, PanelRecord
-from src.orient import choose_rotation
-from src.panels import find_panels, iou
+from src.digitize.orient import choose_rotation
+from src.digitize.panels import find_panels, iou
 
 ROOT = Path(__file__).resolve().parents[2]
-
 
 def load_layout(name_or_path: str) -> dict:
     p = Path(name_or_path)
     p = p if p.exists() else ROOT / "configs" / "layouts" / f"{name_or_path}.yml"
     return yaml.safe_load(p.read_text(encoding="utf-8"))
 
-
 def load_image(path: Path) -> np.ndarray:
     """Upright BGR image (EXIF orientation applied)."""
     return cv2.cvtColor(np.asarray(ImageOps.exif_transpose(Image.open(path).convert("RGB"))), cv2.COLOR_RGB2BGR)
-
 
 def fit_side(image: np.ndarray, max_side: int) -> tuple[np.ndarray, float]:
     """Scale a page down once when its long side exceeds `max_side`: the grid finder expects dots about 9 to 15 px apart (a 300 dpi scan), and an 870 dpi scan has them 35 px apart."""
     s = min(1.0, max_side / max(image.shape[:2]))
     return (cv2.resize(image, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else image), s
-
 
 def cut_at_gap(mask: np.ndarray, gap_px: int) -> np.ndarray:
     """Keep the run of trace columns from the left; an empty stretch of `gap_px` columns past 40 percent of the width ends this panel's own trace."""
@@ -55,7 +48,6 @@ def cut_at_gap(mask: np.ndarray, gap_px: int) -> np.ndarray:
             mask[:, x:] = 0
             break
     return mask
-
 
 class Digitizer:
     def __init__(self, cfg: dict, layout: dict):
@@ -154,7 +146,6 @@ class Digitizer:
             return (k + 180) % 360, read(turned), turned
         return k, again, turned
 
-    # ---- panel mode ---------------------------------------------------------------------------------------------
     def front_page(self, image: np.ndarray) -> tuple[list[PanelFront], np.ndarray, int, list[dict]]:
         """The front part of every ECG panel on a page, the upright page, the counterclockwise rotation that made it upright,
         and every panel the finder saw (ECG, report, other) with its box in upright page pixels."""
@@ -291,37 +282,6 @@ class Digitizer:
     def panel(self, up: np.ndarray, prob: np.ndarray | None, box: list[int], index: int, page_texts: list[dict] | None = None, scale: float = 1.0, assumed_gain: float | None = None,
               force_gain: float | None = None, force_labels: list[str] | None = None, texts: list[dict] | None = None) -> PanelRecord:
         return self.trace(self.front(up, box, index, page_texts, scale, assumed_gain, force_gain, force_labels, texts), prob)
-
-    # ---- page mode ----------------------------------------------------------------------------------------------
-    def run_fixed_page(self, image: np.ndarray) -> list[PanelRecord]:
-        lay, cfg = self.layout, self.cfg
-        h, w = image.shape[:2]
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        fx0, fx1, fy0, fy1 = lay["grid"].get("fit_region", [0, 1, 0, 1])
-        gx0, gx1, gy0, gy1 = int(fx0 * w), int(fx1 * w), int(fy0 * h), int(fy1 * h)
-        grid = fit_grid(gray[gy0:gy1, gx0:gx1], lay["grid"]).shifted(gx0, gy0) if lay["grid"]["kind"] == "dot" else fit_grid(gray, lay["grid"])
-        gain = lay["gain"]["fixed"]
-        found = []
-        if "pulses" in lay:
-            pw = lay["pulses"]["window"]
-            found = pulses.find_pulses(gray, grid, gain, (int(pw[0] * w), int(pw[1] * w), int(pw[2] * h), int(pw[3] * h)), lay["pulses"])
-        if lay["mask"]["kind"] == "unet":
-            full = self.unet.mask(self.unet.probability(image))
-        else:
-            full = maskmod.local_contrast_mask(gray, lay["mask"])
-        records = []
-        for r in lay["regions"]:
-            rx0, rx1, ry0, ry1 = int(r["x"][0] * w), int(r["x"][1] * w), int(r["y"][0] * h), int(r["y"][1] * h)
-            mask = np.zeros_like(full)
-            mask[ry0:ry1, rx0:rx1] = full[ry0:ry1, rx0:rx1]
-            rec = PanelRecord(r["id"], lay["name"], [rx0, ry0, rx1, ry1], [0, 0], r["labels"], "layout", gain, "layout", grid, [p["height_mm"] for p in found])
-            try:
-                rec.leads, _ = self.digitize_region(mask, grid, gain, r["labels"], r["rows"], r["rows_mode"])
-            except Exception as exc:
-                rec.error = f"{type(exc).__name__}: {exc}"
-            records.append(self.finish(rec))
-        return records
-
 
 def sample_lead_safe(mask, grid, gain, x_range, cfg):
     from src.digitize.sample import sample_lead

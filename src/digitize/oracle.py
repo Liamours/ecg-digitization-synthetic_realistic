@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 from src import paths
 from src.digitize.pipeline import Digitizer, fit_side, load_image, load_layout
-from src.orient import rotate_box
+from src.digitize.orient import rotate_box
 
 MODES = ("panels", "gain", "labels", "names")
 

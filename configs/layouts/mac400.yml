@@ -1,7 +1,6 @@
 # The canonical pipeline's layout (2026-10-03): trace by Open-ECG-Digitizer's pretrained network, lead separation by
 # ecgtizer's fragmented extraction, text by RapidOCR. See README.md, "Canonical pipeline".
 name: mac400
-mode: panel
 panel_finding: configs/pages.yml
 label_sets: [[I, II, III], [aVR, aVL, aVF], [V1, V2, V3], [V4, V5, V6]]
 rows: 3

@@ -93,10 +93,7 @@ def main() -> None:
         try:
             image, work_scale = fit_side(load_image(path), cfg["work_side"])
             out.mkdir(parents=True, exist_ok=True)  # a page with no panel still gets its page.json
-            if layout["mode"] == "panel":
-                records, up, k = digitizer.run_panel_page(image)
-            else:
-                records, up, k = digitizer.run_fixed_page(image), image, 0
+            records, up, k = digitizer.run_panel_page(image)
             work = out / "_work" if args.final_only else out  # final-only: the per-panel files live only until the picture is drawn
             work.mkdir(parents=True, exist_ok=True)
             for r in records:

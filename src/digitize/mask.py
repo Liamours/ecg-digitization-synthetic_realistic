@@ -1,30 +1,9 @@
-"""Trace pixels: the Open-ECG-Digitizer U-Net probability (pretrained, the default), or a local-contrast mask for the
-page-mode layouts. The MAC 400 threshold rules were removed on 2026-10-03: on the 39 scans they passed 278 of 523 leads
-against 416 of 538 for the pretrained network."""
+"""Trace pixels: the Open-ECG-Digitizer U-Net probability (pretrained, inference only). The MAC 400 threshold rules were
+removed on 2026-10-03: on the 39 scans they passed 278 of 523 leads against 416 of 538 for the pretrained network."""
 from pathlib import Path
 
 import cv2
 import numpy as np
-
-
-def _drop_small(mask: np.ndarray, min_extent: int | None = None, min_area: int | None = None) -> np.ndarray:
-    n, lab, st, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    small = np.zeros(n, bool)
-    if min_extent is not None:
-        small |= np.maximum(st[:, 2], st[:, 3]) < min_extent
-    if min_area is not None:
-        small |= st[:, 4] < min_area
-    small[0] = False
-    mask[small[lab]] = 0
-    return mask
-
-
-def local_contrast_mask(gray: np.ndarray, cfg: dict) -> np.ndarray:
-    """Shaded photos: pixels much darker than the local paper level."""
-    flat = gray.astype(np.int16) - cv2.medianBlur(gray, cfg["median_kernel"]).astype(np.int16)
-    m = ((gray < cfg["gray_max"]) & (flat < -cfg["contrast"])).astype(np.uint8)
-    return _drop_small(m, min_extent=cfg["min_extent"])
-
 
 class UNetMask:
     """The Open-ECG-Digitizer segmentation network (third_party/open_ecg_digitizer/unet.py, its published weights); its

@@ -23,8 +23,8 @@ import numpy as np
 
 from src import paths
 from src.digitize.report import read_leads
-from src.orient import rotate_box
-from src.panels import iou
+from src.digitize.orient import rotate_box
+from src.digitize.panels import iou
 
 
 def waveform_score(gt: np.ndarray, fs: float, t: np.ndarray, mv: np.ndarray, max_shift_s: float = 0.5, tol_frac: float = 0.10) -> dict:

@@ -1,6 +1,4 @@
-out_dir: '@inferences/docling_inference/pipeline_run'
-max_side: 2500
-seed: 42
+# Rotation and panel finding from the page text (src/digitize/orient.py, src/digitize/panels.py); referenced by the layouts as `panel_finding`.
 min_text_len: 4
 head_regex: 'A?C\s*400|^\s*GE\s*$'
 foot_regex: 'For\s*\d{7}|\d{7}\s*-\s*\d{3}'

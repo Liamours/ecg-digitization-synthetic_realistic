@@ -1,6 +1,5 @@
 # The canonical pipeline on phone photos of MAC 400 pages: as mac400.yml, with a wider range for the dot pitch.
 name: mac400_phone
-mode: panel
 panel_finding: configs/pages.yml
 label_sets: [[I, II, III], [aVR, aVL, aVF], [V1, V2, V3], [V4, V5, V6]]
 rows: 3
