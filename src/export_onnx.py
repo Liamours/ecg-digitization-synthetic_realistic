@@ -22,6 +22,7 @@ Usage:
     python -m src.export_onnx --config configs/export_onnx.yml
 """
 import argparse
+import gc
 import random
 import shutil
 import subprocess
@@ -35,6 +36,7 @@ import rapidocr
 import torch
 import yaml
 from onnxruntime.quantization import CalibrationDataReader, QuantFormat, QuantType, quantize_static
+from onnxruntime.quantization.calibrate import MinMaxCalibrater
 from onnxruntime.quantization.shape_inference import quant_pre_process
 
 from src import paths
@@ -48,6 +50,22 @@ class TraceProbability(torch.nn.Module):
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return torch.softmax(self.unet(image), dim=1)[:, self.channel]
+
+
+def collect_ranges(self, data_reader) -> None:
+    """MinMaxCalibrater.collect_data of ONNX Runtime 1.30 with its ranges kept: with `max_intermediate_outputs` set, the upstream
+    method clears the collected values before computing their ranges, so nothing is kept. This computes the ranges after every
+    input and then clears, so memory does not grow with the number of calibration inputs."""
+    while inputs := data_reader.get_next():
+        outputs = zip(self.infer_session.get_outputs(), self.infer_session.run(None, inputs), strict=False)
+        self.intermediate_outputs.append([value if o.name not in self.model_original_outputs else None for o, value in outputs])
+        self.compute_data()
+        self.clear_collected_data()
+    if self.calibrate_tensors_range is None:
+        raise ValueError("No data is collected.")
+
+
+MinMaxCalibrater.collect_data = collect_ranges
 
 
 class Crops(CalibrationDataReader):
@@ -112,16 +130,15 @@ def main() -> None:
         print(f"| {path.name} | {path.stat().st_size / 2**20:.1f} | {worst:.5f} | {changed:.6f} |", flush=True)
 
     parity(out / "unet.ort")
+    del model, unet   # PyTorch is not needed for the calibration
+    gc.collect()
     pre, int8 = out / "unet_pre.onnx", out / "unet_int8.onnx"
     quant_pre_process(str(fp32), str(pre))
     quantize_static(str(pre), str(int8), Crops(crops[:cfg["calibration_crops"]], prepare), quant_format=QuantFormat.QDQ, per_channel=True,
-                    activation_type=QuantType.QInt8, weight_type=QuantType.QInt8, reduce_range=False,
-                    extra_options={"CalibMaxIntermediateOutputs": 1})   # ranges after every crop, so the collected values do not accumulate
+                    activation_type=QuantType.QInt8, weight_type=QuantType.QInt8, reduce_range=False)
     pre.unlink()
     to_ort(int8)
-    print(f"input {width} x {height}, int8 calibrated on {cfg['calibration_crops']} synthetic panels\n\n| File | MB |\n|---|---|")
-    for name in [out / "unet.ort", out / "unet_int8.ort"] + [ocr_out / Path(n).with_suffix(".ort") for n in cfg["rapidocr_files"] if n.endswith(".onnx")]:
-        print(f"| {name.name} | {name.stat().st_size / 2**20:.1f} |")
+    parity(out / "unet_int8.ort")
 
 
 if __name__ == "__main__":
