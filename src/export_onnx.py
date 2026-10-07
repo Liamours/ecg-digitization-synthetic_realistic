@@ -12,7 +12,8 @@ and fixed shapes, which leave the optimizer and static quantization more room. W
 - `unet_int8.onnx`, `unet_int8.ort`: static int8 in QDQ format, per-channel weights, the ARM choice of the `quantize_static`
   docstring (QInt8 activations and weights, reduce_range off); static is what ONNX Runtime recommends for CNNs
 
-Calibration uses synthetic panels (`calibration_dir`, the training data of this project), prepared exactly as the pipeline
+The `.ort` files are checked against PyTorch on held-out synthetic panels (`check_crops`): largest probability difference and
+share of mask pixels that change at the trace threshold; graph optimizations can change results. Calibration uses synthetic panels (`calibration_dir`, the training data of this project), prepared exactly as the pipeline
 prepares a crop for the phone (`mobile.unet` scale and input size). The `.ort` files are written with the ONNX Runtime
 version the Android app uses (`android_ort_version`); the script stops if the installed version differs. Every session and
 PyTorch are capped at `threads`. Accuracy of each variant is measured by scripts/eval_mobile.sh on a synthetic set.
@@ -28,6 +29,7 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 import onnxruntime as ort
 import rapidocr
 import torch
@@ -93,11 +95,28 @@ def main() -> None:
     crops = sorted(paths.resolve(cfg["calibration_dir"]).glob("*.png"))
     random.Random(cfg["seed"]).shuffle(crops)
     prepare = lambda bgr: network_input(bgr, dcfg["unet"]["max_side"], mobile["scale"], mobile["input_size"])[0]
+    check = [prepare(cv2.imread(str(c))) for c in crops[cfg["calibration_crops"]:cfg["calibration_crops"] + cfg["check_crops"]]]
+    with torch.no_grad():
+        reference = [model(torch.from_numpy(x))[0].numpy() for x in check]
+    threshold = dcfg["unet"]["threshold"]
+    print(f"input {width} x {height}; against PyTorch on {len(check)} synthetic panels not used for calibration\n\n"
+          "| File | MB | Largest probability difference | Mask pixels changed |\n|---|---|---|---|", flush=True)
+
+    def parity(path: Path) -> None:
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads, opts.inter_op_num_threads = cfg["threads"], 1
+        sess = ort.InferenceSession(str(path), opts, providers=["CPUExecutionProvider"])
+        got = [sess.run(None, {"image": x})[0][0] for x in check]
+        worst = max(float(np.abs(g - r).max()) for g, r in zip(got, reference))
+        changed = sum(int(((g > threshold) != (r > threshold)).sum()) for g, r in zip(got, reference)) / sum(r.size for r in reference)
+        print(f"| {path.name} | {path.stat().st_size / 2**20:.1f} | {worst:.5f} | {changed:.6f} |", flush=True)
+
+    parity(out / "unet.ort")
     pre, int8 = out / "unet_pre.onnx", out / "unet_int8.onnx"
     quant_pre_process(str(fp32), str(pre))
     quantize_static(str(pre), str(int8), Crops(crops[:cfg["calibration_crops"]], prepare), quant_format=QuantFormat.QDQ, per_channel=True,
                     activation_type=QuantType.QInt8, weight_type=QuantType.QInt8, reduce_range=False,
-                    extra_options={"CalibMaxIntermediateOutputs": 1})   # ranges after every crop: holding all intermediate tensors of this network would fill the RAM
+                    extra_options={"CalibMaxIntermediateOutputs": 1})   # ranges after every crop, so the collected values do not accumulate
     pre.unlink()
     to_ort(int8)
     print(f"input {width} x {height}, int8 calibrated on {cfg['calibration_crops']} synthetic panels\n\n| File | MB |\n|---|---|")
