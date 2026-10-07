@@ -46,9 +46,9 @@ def _best(dots: np.ndarray, angles: np.ndarray, pitches: np.ndarray, device: str
     return best[1], best[2]
 
 
-def initial_angle_pitch(dots: np.ndarray, pitch_range: tuple[float, float], angle_range: float, rng: np.random.Generator, device: str = "cpu") -> tuple[float, float]:
-    """Coarse-to-fine search of the lattice angle and pitch on a subsample of the dots."""
-    pts = dots if len(dots) <= MAX_DOTS else dots[rng.choice(len(dots), MAX_DOTS, replace=False)]
+def initial_angle_pitch(dots: np.ndarray, pitch_range: tuple[float, float], angle_range: float, device: str = "cpu") -> tuple[float, float]:
+    """Coarse-to-fine search of the lattice angle and pitch on every k-th dot (at most MAX_DOTS), in the order the dots were found: the same dots on every platform."""
+    pts = dots[::-(-len(dots) // MAX_DOTS)]
     ang, pitch = _best(pts, np.arange(-angle_range, angle_range + 1e-9, 0.2), np.arange(pitch_range[0], pitch_range[1], 0.1), device)
     return _best(pts, np.arange(ang - 0.25, ang + 0.2501, 0.02), np.arange(pitch - 0.15, pitch + 0.1501, 0.01), device)
 
@@ -57,7 +57,7 @@ def fit_dot_grid(gray: np.ndarray, cfg: dict, device: str = "cpu") -> Grid:
     dots = find_dots(gray, cfg["blackhat_kernel"], cfg["blackhat_contrast"], tuple(cfg["dot_area"]), cfg["dot_max_side"])
     if len(dots) < 200:
         raise ValueError(f"too few grid dots found ({len(dots)})")
-    ang, pitch = initial_angle_pitch(dots, tuple(cfg["pitch_px_range"]), cfg["angle_range_deg"], np.random.default_rng(42), device)
+    ang, pitch = initial_angle_pitch(dots, tuple(cfg["pitch_px_range"]), cfg["angle_range_deg"], device)
     r = np.radians(ang)
     a1 = pitch * np.array([np.cos(r), np.sin(r)])
     a2 = pitch * np.array([-np.sin(r), np.cos(r)])

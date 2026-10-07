@@ -1,0 +1,11 @@
+out_dir: '@inferences/mobile_reference'
+min_free_gb: 3   # the laptop stops responding when a run starts with less (overview/hardware.md)
+pages:   # one scan per rotation seen (0, 90, 180 degrees), an 870 dpi page that is scaled down, and five phone photos
+  - '@mac400-phone_photo/NORMAL 17.12.2024/NORMAL (4).jpg'
+  - '@mac400-phone_photo/NORMAL Tambahan/CamScanner 13-11-2024 00.00_64.jpg'
+  - '@mac400-phone_photo/PJB 19.12.2024/PDA (8).jpg'
+  - '@mac400-phone_photo/PJB/PARACHUTE MITRAL VALVE 1, ASD.jpg'
+  - '@mac400-phone_photo/PJB/PDA 9.jpg'
+  - '@mac400-scan/MAC_400/mac400-2.png'
+  - '@mac400-scan/scan_29/Image_20260922_0002.jpg'
+  - '@mac400-scan/scan_29/Image_20260922_0012.jpg'
