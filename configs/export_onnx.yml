@@ -1,0 +1,10 @@
+digitize_config: configs/digitize.yml   # the U-Net weights and the phone settings (`mobile`)
+out_dir: '@models/open_ecg_digitizer-onnx'
+opset: 18   # the lowest the torch.export-based exporter writes
+android_ort_version: 1.30.0   # com.microsoft.onnxruntime:onnxruntime-android of the app; .ort files are written with this version
+calibration_dir: '@synthetic-260930-1856/panels-noised-rectified'   # upright noised synthetic panels (*.png): the training data
+calibration_crops: 30
+seed: 42
+threads: 4   # every ONNX Runtime session and PyTorch: half the laptop's logical cores (overview/hardware.md)
+rapidocr_out_dir: '@models/rapidocr-onnx'
+rapidocr_files: [PP-OCRv6_det_small.onnx, PP-OCRv6_rec_small.onnx, ch_ppocr_mobile_v2.0_cls_mobile.onnx, ppocrv6_dict.txt]   # the OCR models the pipeline uses, and the recognizer's character list

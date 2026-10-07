@@ -25,7 +25,7 @@ from tqdm import tqdm
 
 from src import paths
 from src.digitize import assemble, report, reverse
-from src.digitize.pipeline import Digitizer, fit_side, load_image, load_layout
+from src.digitize.pipeline import Digitizer, apply_backend, fit_side, load_image, load_layout
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 log = logging.getLogger("digitize")
@@ -57,6 +57,8 @@ def main() -> None:
     ap.add_argument("--report", action="store_true", help="write report.png (page with boxes, plus every lead) in each page folder")
     ap.add_argument("--final-only", action="store_true", help="keep per page only the final labels (record.csv, record.json) and report.png (the original page with panel boxes, text boxes and traces, plus every lead); no per-panel files. The done marker is record.json")
     ap.add_argument("--device", help="cpu, cuda or auto; overrides the config")
+    ap.add_argument("--backend", choices=["torch", "onnx"], default="torch", help="onnx: the `mobile` settings of the config (ONNX Runtime only, as on the phone)")
+    ap.add_argument("--unet", nargs="*", default=[], metavar="KEY=VALUE", help="override trace network settings after --backend, e.g. onnx=@models/open_ecg_digitizer-onnx/unet.ort scale=0.5 (the variants of scripts/eval_mobile.sh)")
     ap.add_argument("--manifest", type=paths.resolve, help="a dataset's _labels/manifest.csv; with it only pages whose page_style equals --style are run")
     ap.add_argument("--style", default="mac400", help="page_style to keep when --manifest is given")
     ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @mac400-scan/scan_29 style aliases work, see configs/paths.yml")
@@ -64,6 +66,7 @@ def main() -> None:
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     if args.device:
         cfg["device"] = args.device
+    apply_backend(cfg, args.backend, args.unet)
     layout = load_layout(args.layout)
     marker = "record.json" if args.final_only else "page.json"
     paths.resolve(cfg["log_dir"]).mkdir(parents=True, exist_ok=True)

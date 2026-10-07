@@ -50,9 +50,12 @@ def main() -> None:
     ap.add_argument("--out-dir", type=paths.resolve, required=True)
     ap.add_argument("--list", type=paths.resolve, help="text file with one image path per line")
     ap.add_argument("inputs", type=paths.resolve, nargs="*", help="files or folders; @mac400-scan style aliases work, see configs/paths.yml")
+    ap.add_argument("--device", help="cpu, cuda or auto; overrides the config")
     ap.add_argument("--relabel", action="store_true", help="no OCR: apply the current lead-name rule and trace-row rule to the text already saved in --out-dir and rewrite each panel's names and rows")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    if args.device:
+        cfg["device"] = args.device
     layout = load_layout(args.layout)
     if args.relabel:
         from src.digitize.text import fill_unread_sets, trace_zone

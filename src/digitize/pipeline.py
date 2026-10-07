@@ -21,6 +21,16 @@ from src.digitize.panels import find_panels, iou
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+def apply_backend(cfg: dict, backend: str, unet: list[str]) -> None:
+    """`onnx`: the phone settings of the config (`mobile`: ONNX OCR and the ONNX trace network); then `KEY=VALUE` overrides of
+    the trace network settings (`@` paths are not YAML and stay text)."""
+    if backend == "onnx":
+        cfg["ocr_backend"] = cfg["mobile"]["ocr_backend"]
+        cfg["unet"].update(cfg["mobile"]["unet"])
+    cfg["unet"].update({k: v if v.startswith("@") else yaml.safe_load(v) for k, v in (kv.split("=", 1) for kv in unet)})
+
+
 def load_layout(name_or_path: str) -> dict:
     p = Path(name_or_path)
     p = p if p.exists() else ROOT / "configs" / "layouts" / f"{name_or_path}.yml"
@@ -59,7 +69,8 @@ class Digitizer:
     @property
     def unet(self) -> maskmod.UNetMask:
         if self._unet is None:
-            self._unet = maskmod.UNetMask({**self.cfg["unet"], "weights": paths.resolve(self.cfg["unet"]["weights"]), "device": self.cfg["device"]})
+            u = self.cfg["unet"]
+            self._unet = maskmod.UNetMask({**u, "weights": paths.resolve(u["weights"]), "onnx": paths.resolve(u.get("onnx", "")), "device": self.cfg["device"]})
         return self._unet
 
     @property
@@ -126,7 +137,7 @@ class Digitizer:
         OCR reads turned text far worse. The header-above-footer cue picks the direction; when it is missing (no header or no
         footer read) both directions are read and the one that yields more known printed words wins."""
         cfg = self.cfg
-        read = lambda im: ocr.read_text(cv2.cvtColor(im, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
+        read = lambda im: ocr.read_text(cv2.cvtColor(im, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"], cfg["ocr_backend"])
         vocab = re.compile(finding["vocab_regex"], re.I)
         words = lambda ts: sum(bool(vocab.search(t["text"])) for t in ts)
         frame = lambda r: small if r == 0 else np.rot90(small, r // 90).copy()
@@ -217,7 +228,7 @@ class Digitizer:
         crop = up[cy0:cy1, cx0:cx1]
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         if texts is None:
-            texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"])
+            texts = ocr.read_text(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), cfg["ocr_threads"], cfg["device"], cfg["ocr_backend"])
         label_re = re.compile(lay["labels"]["label_regex"])
         page_names = [{"text": t["text"], "bbox": [scale * t["bbox"][0] - cx0, scale * t["bbox"][1] - cy0, scale * t["bbox"][2] - cx0, scale * t["bbox"][3] - cy0]}
                       for t in (page_texts or []) if label_re.match(t["text"].strip()) and cx0 <= scale * (t["bbox"][0] + t["bbox"][2]) / 2 < cx1 and cy0 <= scale * (t["bbox"][1] + t["bbox"][3]) / 2 < cy1]

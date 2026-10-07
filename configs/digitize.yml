@@ -39,4 +39,13 @@ unet:   # Open-ECG-Digitizer's pretrained trace network (code in third_party/ope
   weights: '@models/open_ecg_digitizer-pretrained/unet_weights_07072025.pt'
   max_side: 3000
   threshold: 0.235
+mobile:   # the phone pipeline, applied by src.digitize.run --backend onnx: ONNX Runtime only, no PyTorch (src.export_onnx makes the files)
+  ocr_backend: onnxruntime   # RapidOCR's own ONNX models
+  unet:
+    backend: onnx
+    onnx: '@models/open_ecg_digitizer-onnx/unet_int8.ort'   # static int8, calibrated at this scale
+    scale: 0.5     # each panel crop at half width and height: a quarter of the pixels; the probability is enlarged back before the threshold
+    input_size: [768, 640]   # fixed network input, width and height: a halved crop is padded to it (a larger one is first scaled to fit); fixed shapes let the optimizer and static quantization do more
+    threads: 4     # ONNX Runtime threads; all cores by default made the laptop stop responding (overview/hardware.md, 2026-10-06)
+ocr_backend: torch   # RapidOCR engine of the desktop pipeline
 log_dir: '@logs'

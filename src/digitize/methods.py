@@ -27,7 +27,7 @@ from tqdm import tqdm
 
 from src import paths
 from src.digitize import assemble
-from src.digitize.pipeline import Digitizer, load_layout
+from src.digitize.pipeline import Digitizer, apply_backend, load_layout
 from src.digitize.record import PanelFront
 from src.digitize.separate import METHODS
 
@@ -44,10 +44,13 @@ def main() -> None:
     ap.add_argument("--split", choices=SPLITS, required=True)
     ap.add_argument("--out-dir", type=paths.resolve, help="default: <front folder>__methods/<mask>__<split>")
     ap.add_argument("--device", help="cpu, cuda or auto; overrides the config")
+    ap.add_argument("--backend", choices=["torch", "onnx"], default="torch", help="onnx: the trace network settings of `mobile` in the config (the phone)")
+    ap.add_argument("--unet", nargs="*", default=[], metavar="KEY=VALUE", help="override trace network settings after --backend")
     args = ap.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     if args.device:
         cfg["device"] = args.device
+    apply_backend(cfg, args.backend, args.unet)
     layout = load_layout(args.layout)
     out_dir = args.out_dir or args.front.with_name(args.front.name.replace("front_", "methods_")) / f"{args.mask}__{args.split}"
     out_dir.mkdir(parents=True, exist_ok=True)
